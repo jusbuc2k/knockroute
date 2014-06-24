@@ -21,14 +21,49 @@
         return options;
     };
 
+    kr.utils.parseQueryString = function (path) {
+        var pairs = {};
 
-    
-    function Route(route, defaults) {
+        var idx = (path || '').indexOf('?');
+        var count = 0;
+        if (idx > 0) {
+            path = path.substr(idx + 1);
+        } else {
+            return null;
+        }       
+
+        if (typeof (path) !== 'undefined') {
+            var tokens = path.split('&');
+            var pair;
+            for (var i = 0; i < tokens.length; i++) {
+                pair = tokens[i].split("=");
+                if (pair.length === 2) {
+                    pairs[pair[0]] = pair[1];
+                    count++;
+                }
+            }
+        }
+
+        if (count > 0) {
+            return pairs;
+        } else {
+            return null;
+        }
+    }
+        
+    function Route(route, defaults, options) {
         /// <param name="route" type="String"/>
         /// <param name="options" type="Object"/>
-        var namePattern = '[\\w\\.\\-]+';
-        var safeRegex = /[\\\+]/gi;        
-        var elementsRegex = /\{([\w:\.\-]+)\}/gi;
+
+        var defaultOptions = {
+            parseQueryString: true
+        };
+
+        this.options = kr.utils.defaults(defaultOptions, options || {});
+
+        var keyValuePattern = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
+        var safeRegex = /[\\\+\.]/gi;
+        var elementsRegex = /\{([\w:]+)\}/gi;
 
         var foo = fromString(route);
 
@@ -36,12 +71,10 @@
         this.elements = foo.keys;
         this.regex = foo.regex;        
         this.defaults = defaults || {};
-
+               
         function fromString(route) {
             /// <param name="route" type="String">route string</param>            
             var r = '^';
-
-            route = route.replace(safeRegex, '\\$&');
 
             var names = [];
             var res;
@@ -65,11 +98,14 @@
                 }
             }
 
+            route = route.replace(safeRegex, '\\$&');
+            route = route.replace(/\*/gi, '.*');
+
             if (names.length <= 0) {
                 r = null;
             } else {
-                r += route.replace(elementsRegex, '(' + namePattern + ')');
-                r += '.*';
+                r += route.replace(elementsRegex, '(' + keyValuePattern + ')');
+                r += '\\??.*';
             }
 
             return { regex: r, keys: names };
@@ -104,10 +140,18 @@
         var regex = new RegExp(this.regex, 'gi');
 
         var res = regex.exec(path);
+
         if (res != null) {
             for (var i = 1; i < res.length; i++) {
                 values[this.elements[idx].name] = Route.parseKeyValue(res[i], this.elements[idx].type);
                 idx++;
+            }
+        }
+
+        if (this.options.parseQueryString) {
+            var qs = kr.utils.parseQueryString(path);
+            if (qs) {
+                kr.utils.defaults(qs, values);
             }
         }
 
@@ -130,8 +174,7 @@
     }
 
     //#endregion
-    
-    
+        
     ///#Default Providers
 
     function HashRouteValuesProvider(options) {
@@ -257,7 +300,7 @@
 
     ///#endregion
     
-    ///#region Template Router
+    ///#region View Router
    
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
@@ -521,7 +564,6 @@
         return '#' + serializeRouteValues(_(routeValues || {}).extend({ view: view }));
     };
 
-    ///#endregion
-    
+    ///#endregion    
 
 })(window, ko);
