@@ -1,0 +1,10 @@
+*.sln
+*.suo
+*.swp
+*.csproj.user
+bin
+obj
+*.pdb
+desktop.ini
+.DS_Store
+dist
