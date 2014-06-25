@@ -1,6 +1,13 @@
 ﻿/// <reference path="http://code.jquery.com/qunit/qunit-1.14.0.js" />
+/// <reference path="http://code.jquery.com/jquery-1.11.0.min.js" />
 /// <reference path="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js" />
 /// <reference path="../src/knockroute.js" />
+
+var orig = window.location.href;
+
+QUnit.done(function () {
+    window.history.pushState({}, '', orig);
+});
 
 QUnit.test('TestNoConflict', function (assert) {
     expect(3);
@@ -14,6 +21,8 @@ QUnit.test('TestNoConflict', function (assert) {
 
     window.kr = tmp;
 });
+
+QUnit.module('Route');
 
 QUnit.test('TestParseQueryString', function (assert) {
     expect(5);
@@ -33,7 +42,7 @@ QUnit.test('TestParseQueryString', function (assert) {
     assert.ok(qs == null);
 });
 
-QUnit.test('ParseRoute', function(assert) {
+QUnit.test('TestParseRoute', function(assert) {
     expect(8);
 
     var valueChars = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
@@ -56,7 +65,7 @@ QUnit.test('ParseRoute', function(assert) {
     assert.strictEqual(goodRoute.elements.length, 3);
 });
 
-QUnit.test('TestRouteMatch', function (assert) {
+QUnit.test('TestMatch', function (assert) {
     expect(12);
 
     var path = '/Foo/123/Blah';
@@ -83,7 +92,7 @@ QUnit.test('TestRouteMatch', function (assert) {
     assert.strictEqual(rv.bar, 'Blah');
 });
 
-QUnit.test('TestRouteMatchWithDataTypeParsing', function (assert) {
+QUnit.test('TestMatchWithDataTypeParsing', function (assert) {
     expect(3);
 
     var path = '/123.456/789.123/2a';
@@ -94,7 +103,7 @@ QUnit.test('TestRouteMatchWithDataTypeParsing', function (assert) {
     assert.strictEqual(routeValues.baz, 42);
 });
 
-QUnit.test('TestRouteResolvePath', function (assert) {
+QUnit.test('TestResolvePath', function (assert) {
     expect(1);
 
     var route = new kr.Route('/{foo}/{bar}')
@@ -102,6 +111,16 @@ QUnit.test('TestRouteResolvePath', function (assert) {
     var t = route.resolve({ foo: 'blah', bar: 'test' });
 
     assert.strictEqual(t, '/blah/test');        
+});
+
+QUnit.test('TestResolvePathWithQueryString', function (assert) {
+    expect(2);
+
+    var t1 = new kr.Route('/{foo}/{bar}').resolve({ foo: 'blah', bar: 'test', baz: 123, bean: 'curd' });    
+    assert.strictEqual(t1, '/blah/test?baz=123&bean=curd');
+
+    var t2 = new kr.Route('/{foo}/{bar}').resolve({ foo: 'blah', bar: 'test', bean: 'curd' });
+    assert.strictEqual(t2, '/blah/test?bean=curd');
 });
 
 QUnit.test('TestRouteWithBasePath', function (assert) {
@@ -158,4 +177,122 @@ QUnit.test('TestRouteValuesEqual', function (assert) {
     var rv2 = new kr.Route('/{view}/{id}').extractRouteValues('/Foo/Bar/Cat/456');
 
     assert.strictEqual(JSON.stringify(rv1), JSON.stringify(rv2));
+});
+
+QUnit.module('Providers');
+
+QUnit.asyncTest('TestHashPathStringProvider', function (assert) {
+    var psp = new kr.HashPathStringProvider();
+    expect(5);
+
+    window.location.hash = '#';
+
+    psp.start();
+       
+    window.setTimeout(function () {
+        assert.strictEqual(psp.getPath(), '');
+        psp.setPath('foobar');
+
+        window.setTimeout(function () {
+            assert.strictEqual(window.location.hash, '#foobar');
+            assert.strictEqual(psp.getPath(), 'foobar');
+            psp.setPath('/foo/bar');
+            
+            window.setTimeout(function () {
+                assert.strictEqual(window.location.hash, '#/foo/bar');
+                assert.strictEqual(psp.getPath(), '/foo/bar');
+
+                QUnit.start();
+            });
+        }, 20);
+    }, 20);   
+});
+
+QUnit.asyncTest('TestHashPathStringProviderEvents', function (assert) {
+    var psp = new kr.HashPathStringProvider();
+    expect(1);
+
+    window.location.hash = '#';
+    psp.start();
+
+    psp.pathChanged.subscribe(function (path) {
+        assert.strictEqual(path, 'foobar');
+        psp.stop();
+        window.location.hash = '#';
+        QUnit.start();
+    });
+
+    window.location.hash = '#foobar';
+});
+
+QUnit.asyncTest('TestHistoryPathStringProvider', function (assert) {
+    expect(2);
+
+    var psp = new kr.HistoryPathStringProvider({
+        basePath: '^/\w+/index.html'
+    });
+
+    psp.start();
+        
+    window.history.pushState({}, '', '/foo/bar');
+
+    window.setTimeout(function () {
+        assert.strictEqual(psp.getPath(), '/foo/bar');
+
+        var evt = psp.pathChanged.subscribe(function (path) {
+            assert.strictEqual(window.location.pathname, '/blah/baz/');
+            evt.dispose();
+            psp.stop();
+
+            window.history.pushState({}, '', orig);
+
+            QUnit.start();
+        });
+
+        psp.setPath('/blah/baz/');
+
+    }, 20);
+});
+
+QUnit.asyncTest('TestjQueryTemplateProvider', function (assert) {
+    expect(12);
+
+    var dtp = new kr.jQueryTemplateProvider();
+
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>')");
+    $('#qunit-fixture').append("<script type='text/html' id='template2' data-src='template.html'></script>')");
+    $('#qunit-fixture').append("<script type='text/html' id='template3' data-src='should-not-exist.html'></script>')");
+
+    assert.throws(function () {
+        dtp.unloadTemplate('template5')
+    });
+
+    assert.throws(function () {
+        dtp.unloadTemplate(document.body);
+    });
+            
+    dtp.loadTemplate('template1', function (result) {
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.statusCode, 203);
+        assert.strictEqual(result.template.text.indexOf('Bar'), 3);
+        dtp.unloadTemplate('template1');
+        assert.strictEqual(result.template.text,'');
+                                        
+        dtp.loadTemplate('template2', function (result) {
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.statusCode, 200);
+            assert.ok(result.template.text.indexOf('<h2>It Works</h2>') >= 0);
+
+            dtp.unloadTemplate(result.template);
+            assert.strictEqual(result.template.text, '');
+                        
+            dtp.loadTemplate('template3', function (result) {
+                assert.strictEqual(result.success, false);
+                assert.strictEqual(result.statusCode, 404);
+                                
+                QUnit.start();
+            });
+        });
+    });
+    
 });

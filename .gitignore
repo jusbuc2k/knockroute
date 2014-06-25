@@ -8,3 +8,5 @@ obj
 desktop.ini
 .DS_Store
 dist
+Web.config
+vwd.webinfo

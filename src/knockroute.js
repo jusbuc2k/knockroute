@@ -1,4 +1,5 @@
 ﻿/// <reference path="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js" />
+/// <reference path="http://code.jquery.com/jquery-1.11.0.min.js" />
 
 ; (function (global, ko) {
     
@@ -49,6 +50,16 @@
         } else {
             return null;
         }
+    }
+
+    kr.utils.serializeQueryString = function (hashTable) {
+        var pairs = [];
+        for (var key in hashTable) {
+            if (hashTable.hasOwnProperty(key)) {
+                pairs.push(key + '=' + hashTable[key]);
+            }
+        }
+        return '?'+pairs.join('&');
     }
         
     function Route(route, defaults, options) {
@@ -112,7 +123,6 @@
         }
     }
 
-    kr.Route = Route;
 
     //#region Statics
 
@@ -131,6 +141,18 @@
 
     Route.prototype.match = function (path) {
         return new RegExp(this.regex, 'gi').test(path);
+    };
+
+    Route.prototype.matchKeys = function (routeValues) {
+        var count = 0;      
+
+        for (var i = 0; i < this.elements.length; i++) {
+            if (routeValues.hasOwnProperty(this.elements[i].name)) {
+                count++;
+            }
+        }
+
+        return count;
     };
 
     Route.prototype.extractRouteValues = function (path) {
@@ -162,408 +184,382 @@
         /// <param name="routeValues" type="Object"/>
         var path = this.route;
 
+        var keys = [];
+        var used = [];
+
         routeValues = kr.utils.defaults(this.defaults, routeValues);
+
+        for (var key in routeValues) {
+            if (routeValues.hasOwnProperty(key)) {
+                keys.push(key);
+            }
+        }
 
         for (var i = this.elements.length - 1; i >= 0; i--) {
             if (routeValues.hasOwnProperty(this.elements[i].name)) {
                 path = path.substr(0, this.elements[i].index) + routeValues[this.elements[i].name] + path.substr(this.elements[i].index + this.elements[i].length);
+                used.push(this.elements[i].name);
             }
+        }
+        
+        if (this.options.parseQueryString && used.length < keys.length){
+            var queryString = {};
+
+            for (var key in routeValues) {
+                if (routeValues.hasOwnProperty(key) && used.indexOf(key) < 0) {
+                    queryString[key] = routeValues[key];
+                }
+            }
+
+            path += kr.utils.serializeQueryString(queryString);
         }
 
         return path;
     }
 
+    kr.Route = Route;
+
     //#endregion
         
-    ///#Default Providers
+    //#Default Providers
 
-    function HashRouteValuesProvider(options) {
+    function HashPathStringProvider() {
         var self = this;
 
-        self.routeValuesChanged = new ko.subscribable();
+        self.pathChanged = new ko.subscribable();
                         
-        self.setRouteValues = function (routeValues) {
-            window.location.hash = '#' + serializeRouteValues(routeValues);
+        self.setPath = function (path) {            
+            window.location.hash = '#' + path;
+            self.pathChanged.notifySubscribers(path);
         };
 
-        self.getRouteValues = function () {
-            return parseRouteValues(window.location.hash);
+        self.getPath = function () {
+            return window.location.hash.slice(1);
         };
 
-        function hashChanged() {
-            self.routeValuesChanged.notifySubscribers(parseRouteValues(window.location.hash));
-        }
-
-        // subscribe to the hashchange event if useRouteValues
-        if (window.addEventListener) {
-            window.addEventListener('hashchange', hashChanged, false);
-        } else if (window.attachEvent) {
-            window.attachEvent('onhashchange', hashChanged);
-        } else {
-            throw 'No hash change event subscription method available.';
-        }
-
-        function parseRouteValues(value) {
-            /// <summary>Route values</summary>
-            /// <param name="value" type="String">Route values in the form name=value</param>
-            var pairs = {};
-                        
-            var regex = /#?(\/(\w+)\/)?(.*)?/;
-            var matches = regex.exec(value);
-            var query = '';
-
-            if (matches) {
-                pairs.view = matches[2];
-                query = matches[3];
+        self.start = function () {
+            // subscribe to the hashchange event if useRouteValues
+            if (window.addEventListener) {
+                window.addEventListener('hashchange', hashChanged, false);
+            } else if (window.attachEvent) {
+                window.attachEvent('onhashchange', hashChanged);
             } else {
-                query = value;
+                throw 'No hash change event subscription method available.';
             }
+        };
 
-            if (typeof (query) !== 'undefined' && query) {
-                var tokens = (query).split('&');
-                var pair;
-                for (var i = 0; i < tokens.length; i++) {
-                    pair = tokens[i].split("=");
-                    if (pair.length === 2) {
-                        pairs[pair[0]] = pair[1];
-                    }
-                }
+        self.stop = function () {
+            // subscribe to the hashchange event if useRouteValues
+            if (window.removeEventListener) {
+                window.removeEventListener('hashchange', hashChanged, false);
+            } else if (window.detachEvent) {
+                window.detachEvent('onhashchange', hashChanged);
+            } else {
+                throw 'No hash change event subscription method available.';
             }
-
-            return pairs;
+        };
+               
+        function hashChanged() {
+            self.pathChanged.notifySubscribers(self.getPath());
         }
 
-        function serializeRouteValues(routeValues) {
-            ///<param name="routeValues" type="Object"></param>
-            var s = '';
-            var first = true;
-            var viewKey = 'view';
-
-            if (routeValues[viewKey]) {
-                s += '/' + routeValues[viewKey] + '/';
-            }
-
-            for (var key in routeValues) {
-                if (routeValues.hasOwnProperty(key) && key !== viewKey) {
-                    if (this[key] !== null) {
-                        if (!first) {
-                            s += '&';
-                        }
-                        s += key + '=' + routeValues[key];
-                        first = false;
-                    }
-                }
-            }
-            return s;
-        }
+        hashChanged();
     }
 
-    function DomTemplateProvider() {
+    kr.HashPathStringProvider = HashPathStringProvider;
+
+
+    function HistoryPathStringProvider(options) {
         var self = this;
+
+        var defaultOptions = {
+            basePath: '^'
+        };
+
+        options = kr.utils.defaults(defaultOptions, options || {});
+
+        self.pathChanged = new ko.subscribable();
+
+        self.setPath = function (path) {
+            window.history.pushState({}, '', extractBase(window.location.pathname) + path);
+            self.pathChanged.notifySubscribers(path);
+        };
+
+        self.getPath = function () {
+            return stripBase(window.location.pathname);
+        };
+
+        self.start = function () {
+            // subscribe to the hashchange event if useRouteValues
+            if (window.addEventListener) {
+                window.addEventListener('popstate', handlePopState, false);
+            } else if (window.attachEvent) {
+                window.attachEvent('onpopstate', handlePopState);
+            } else {
+                throw 'No hash change event subscription method available.';
+            }
+        };
+
+        self.stop = function () {
+            // subscribe to the hashchange event if useRouteValues
+            if (window.removeEventListener) {
+                window.removeEventListener('popstate', handlePopState, false);
+            } else if (window.detachEvent) {
+                window.detachEvent('onpopstate', handlePopState);
+            } else {                
+                throw 'No hash change event subscription method available.';
+            }
+        };
+
+        function extractBase(path) {
+            var regex = new RegExp(options.basePath, 'gi');
+            var res;
+            if (res = regex.exec(path)) {
+                return res[0];
+            } else {
+                return '';
+            }            
+        }
+
+        function stripBase(path) {
+            var regex = new RegExp(options.basePath, 'gi');
+            var res;
+            if (res = regex.exec(path)) {
+                return path.substr(res[0].length);
+            } else {
+                return path;
+            }
+        }
+               
+        function handlePopState() {
+            self.pathChanged.notifySubscribers(self.getPath());
+        }
+
+        handlePopState();
+    };
+
+    kr.HistoryPathStringProvider = HistoryPathStringProvider;
+
+    function DefaultModelFactory() {
+        var self = this;
+    };
+
+    DefaultModelFactory.prototype.createModel = function (constructor, args) {        
+        if (typeof constructor === 'function') {
+            function Wrapper() {
+                return constructor.apply(this, args);
+            };
+
+            Wrapper.prototype = constructor.prototype;
+
+            return new Wrapper();
+        } else {
+            throw 'constructor must be a valid constructor function.'
+        }
+    };  
+
+    function jQueryTemplateProvider() {
+        var self = this;
+
+        if (typeof jQuery === 'undefined') {
+            throw 'jQuery is required to use the DomTemplateProvider';
+        }
     }
 
-    DomTemplateProvider.prototype.loadTemplate = function (templateName, callback) {
-        ///<summary>Loads an HTML template.</summary>
-        ///<param name="templateName" type="String">The id of the script element containing the template contents or reference</param>
-        ///<param name="callback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
-        var template = window.document.getElementById(templateName);
+    jQueryTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
+        ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source.</summary>
+        ///<param name="templateID" type="String">The id of the &lt;script&gt; element containing the template contents or reference</param>
+        ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
+        var template = window.document.getElementById(templateID);
 
         if (!template) {
-            throw 'Unable to load template with id ' + templateName;
+            throw 'There is no element with id ' + templateID + '.';
         }
 
-        var templateSrc = template.getAttribute("data-src");
+        if (template.tagName.toLowerCase() !== 'script'){
+            throw 'The element with id ' + templateID + ' must be a <script> tag in order to use it as a template.';
+        }
 
-        if (templateSrc) {
-            $.get(templateSrc).done(function (content, status, ctx) {
-                var persistent = (template.getAttribute("data-persist") === 'true');
-                if (status === 'success') {
-                    if (persistent) {
-                        template.removeAttribute("data-src");
-                    }
-                    template.text = content;
-                    callback(true, ctx.status, function () {
-                        if (!persistent) {
-                            template.text = '';
-                        }
-                    });
-                } else {
-                    callback(false, ctx.status);
-                }
+        var dataSrc = template.getAttribute("data-src");
+        var dataLoaded = template.getAttribute("data-loaded");
+
+        // As it turns out, this isn't the business of the loader at all.
+        //var dataPersist = (dataSrc == null || (template.getAttribute("data-persist")||'').toLowerCase().trim() === 'true');
+
+        var response = {
+            success: false,
+            statusCode: 0,
+            template: template            
+        };
+
+        if (dataSrc && !dataLoaded) {
+            jQuery.get(dataSrc).done(function (content, status, ctx) {
+                template.text = content;
+                template.setAttribute("data-loaded", "true");
+                response.success = true;
+                response.statusCode = ctx.status
+                completeCallback(response);
             }).fail(function (ctx, status, statusText) {
-                callback(false, ctx.status);
-            })
+                response.success = false;
+                response.statusCode = ctx.status;
+                completeCallback(response);
+            });
         } else {
-            callback(true, 200, function () { });
+            response.success = true;
+            response.statusCode = 203;
+            completeCallback(response);
         }
     };
 
-    ///#endregion
+    jQueryTemplateProvider.prototype.unloadTemplate = function (template) {
+        /// <signature>
+        /// <summary>Unloads a template with the given ID.</summary>
+        /// <param name="template" type="String"></param>
+        /// </signature>
+        /// <signature>
+        /// <summary>Unloads a template specified by the given HTML element.</summary>
+        /// <param name="template" type="HTMLScriptElement">A string.</param>       
+        /// </signature>
+                
+        if (typeof template === 'string') {
+            template = window.document.getElementById(template);
+        }
+
+        if (!(template instanceof HTMLScriptElement)) {
+            throw 'The \'template\' parameter must be an element ID or an HTMLScriptElement';
+        }
+
+        template.text = '';
+    };
+
+    if (typeof jQuery !== 'undefined') {
+        kr.jQueryTemplateProvider = jQueryTemplateProvider;
+    }
     
-    ///#region View Router
+    //#endregion
+    
+    //#region View Router
    
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
         /// <param name="options" type="Object"></param>
         var self = this;
 
-        var defaults = {
-            // Do not trigger first routeChanged() until init() is manually invoked.
-            delayInit: true,
-            // Indicates whether the router will respond to and set route values
-            useRouteValues: true
+        var defaultOptions = {            
+            defaultRoute: '/{view}/{id}',
+            defaultRouteValues: {
+                view:'index'                
+            },
+            viewRouteKey: 'view',
+            pathProvider: 'hash',
+            templateProvider: 'jQuery'
         };
 
-        var isInitialized = false;
-        var currentView = ko.observable({
-            data: {},
-            name: ''
-        });
+        var defaultView = {
+            name: '',
+            model: {},
+            templateName: '',
+            routeValues: null
+        };
 
-        function setCurrent(viewName, model, templateName, routeValues) {
+        kr.utils.defaults(defaultOptions, options);
+
+        //#region Privates
+
+        var currentView = ko.observable(defaultView);
+
+        function setCurrent(name, model, templateID, routeValues) {
             currentView({
+                name: name,
                 model: model,
-                templateName: templateName,
-                viewName: viewName,
+                templateID: templateID,
                 routeValues: routeValues
             });
         }
-        
-        kr.utils.defaults(defaults, options);
 
-        // Hook for unit testing 
-        self.routeProvider = options.routeProvider || new HashRouteValuesProvider();
-
-        // Hook for unit testing
-        self.templateProvider = options.templateProvider || new DomTemplateProvider();
-
-        // Gets a list of the configured views. Views should be added using addView()
-        self.views = [];
-
-        // Gets the current view information (template, model, route values, etc)
-        self.view = ko.computed(function() {
-            return currentView();
-        });
-
-        
-        
-        // Gets an object that persists view data during route changes.
-        self.viewData = {};
-
-        // Gets or sets a flag that indicates if the next route change event should be ignored.
-        self.suppressNextRouteChange = false;
-
-        // Initializes the router by triggering the first routeChanged event.
-        self.init = function () {
-            if (!isInitialized) {
-                routeChanged();
-                isInitialized = true;
+        function getFirstMatchingRoute(path) {
+            for (var i = 0; i < self.routes.length; i++) {
+                if (self.routes[i].match(path)) {
+                    return self.routes[i];
+                }
             }
-        };
+            return self.routes[-1];
+        }
 
-        /// #region Events 
+        function getFirstMatchingView(viewName) {
+            for (var i = 0; i < self.views.length; i++) {
+                if (self.views[i].name === viewName) {
+                    return self.views[i];
+                }
+            }
+            return null;
+        }
 
-        self.loading = new Event();
+        function onPathChanged(path) {
+            /// <param name="path" type="String"></param>
+            var route = getFirstMatchingRoute(path);
+            var routeValues;
 
-        self.loaded = new Event();
-
-        self.routeChanging = new Event();
-
-        /// #endregion
-
-        // event handler for the window hashchange event
-        function routeChanged() {
-            if (!options.useRouteValues) {
-                return false;
+            if (route) {
+                routeValues = route.extractRouteValues(path);
+            } else {
+                //TODO: make this not suck
+                throw 'No matching route defined.';
             }
 
-            if (self.suppressNextRouteChange) {
-                self.suppressNextRouteChange = false;
-                return false;
-            }
-
-            var routeValues = self.routeProvider.getRouteValues();
-            var view = _(self.views).chain().filter(function (x) { return x.viewName === routeValues.view; }).first().value();
-            
-            if (!view) {
-                view = self.views[0];
-            }
+            var view = getFirstMatchingView(routeValues[options.viewRouteKey]);
 
             if (view == null) {
-                throw 'No views are registered.';
+                //TODO: make this not suck
+                throw 'No view available.'
             }
 
-            var model;
-            if (self.currentViewName() === view.viewName && self.currentTemplate()) {
-                model = self.currentTemplate().data;
-            } else {
-                model = createModel(view, self.viewData, routeValues);
+            var model = view.model || {};
+
+            if (typeof model === 'function') {
+                model = self.modelFactory.createModel(model, [self, routeValues]);
             }
-
-            self.setTemplate(view.templateName, model, true, function (modelInstance) {
-
-                setCurrent(view.viewName, model, view.templateName, routeValues);
-
-                if (view.singleton) {
-                    view.modelInstance = modelInstance;
-                }
-            });
+                                    
+            setCurrent(view.name, model, view.templateID, routeValues);
         }
 
-        if (options.useRouteValues) {
-            self.routeProvider.onRouteValuesChanged.subscribe(routeChanged)
+        //#endregion
+
+        //#region Properties
+
+        self.routes = [
+            new kr.Route(options.defaultRoute, options.defaultRouteValues)
+        ];
+
+        self.views = [
+            { name: 'index', model: {}, templateID: '' }
+        ];
+
+        self.routeValues = ko.computed(function () {
+            return currentView().routeValues;
+        });
+
+        if (options.pathProvider === 'history') {
+            self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
+        } else {
+            self.pathProvider = new kr.HashPathStringProvider();
+        }
+        
+        if (options.templateProvider === 'jQuery') {
+            self.templateProvider = new kr.HashPathStringProvider();
+        } else {
+            self.templateProvider = new kr.jQueryTemplateProvider(options.basePath);            
         }
 
-        // subscribe to the template change (before change), and dipose the old template
-        self.currentTemplate.subscribe(function (oldTemplate) {
-            if (oldTemplate) {
-                if (typeof oldTemplate.dispose === 'function') {
-                    oldTemplate.dispose();
-                }
-            }
-        }, null, 'beforeChange');
+        self.modelFactory = new DefaultModelFactory();
+                
+        //#endregion
 
-        // create view entries from the initialization options
-        if (options.views && options.views.length) {
-            _(options.views).forEach(function (view) {
-                self.addView(view.viewName, view.templateName, view.model, view.singleton, view.args);
-            });
-        }
-
-        // Set the current template and model from the initialization options
-        if (options.templateName && options.model) {
-            this.setTemplate(options.templateName, options.model);
-        }
-
-        // Creates a new instance of the model for a view or returns an existing instance for singletons.
-        function createModel(view, viewData, routeValues) {
-            var model = viewData.model;
-
-            if (view.modelInstance && !view.modelInstance.disposed) {
-                model = view.modelInstance;
-            }
-
-            if (model == null) {
-                if (view && typeof (view.model) === 'function') {
-                    if (typeof (options.dependencyResolver) !== 'undefined' && typeof (options.dependencyResolver.createObject) === 'function') {
-                        model = options.dependencyResolver.createObject(view.model, _({ $router: self, $routeValues: routeValues }).extend(view.args));
-                    } else {
-                        model = {};
-                        view.model.apply(model, [self, routeValues]);
-                    }
-                } else if (view && typeof (view.model) === 'object') {
-                    model = view.model;
-                }
-            }
-
-            return model;
-        }
+        onPathChanged(self.pathProvider.getPath());
+        //var isInitialized = false;
     }
 
-    ViewRouter.prototype.addView = function (viewName, templateName, model, singleton, args) {
-        /// <summary>Registers a new view with the router.</summary>
-        this.views.push({
-            viewName: viewName,
-            templateName: templateName,
-            model: model,
-            singleton: singleton,
-            args: args
-        });
-    };
 
-    ViewRouter.prototype.addViews = function (views) {
-        /// <summary>Registers a new view with the router.</summary>
-        /// <param name="views" type="Array">An array of views</param>
-        var self = this;
-        _(views).each(function (v) {
-            self.views.push(v);
-        });
-    };
-
-    ViewRouter.prototype.setTemplate = function (templateName, model, reloadModel, callback) {
-        /// <summary>Sets the current template and model, optionally reloading model.</summary>
-        /// <param name="templateName" type="String">The element ID of the template which will be bound to the given model.</param>
-        /// <param name="model" type="Object">An instance of a View Model to bind the template to.</param>
-        /// <param name="reloadModel" type="Boolean" optional="true">Specify true if the model should be reloaded before binding, not specified or false otherwise.</param>
-        /// <param name="callback" type="Function" optional="true">Function invoked when loadTemplate and loadModel are complete.</param>
-
-        var self = this;
-        var callCount = 0;
-        var onDispose;
-
-        if (templateName == null) {
-            self.currentTemplate({ name: null, data: null });
-        }
-
-        var applyTemplate = function () {
-            callCount++;
-            if (callCount >= 2) {
-                self.currentTemplate({
-                    name: templateName,
-                    data: model,
-                    dispose: function () {
-                        if (typeof onDispose === 'function') {
-                            onDispose();
-                        }
-                    }
-                });
-                self.onLoaded.dispatch(self, [true]);
-                if (typeof callback === 'function') {
-                    callback(model);
-                }
-            }
-        };
-
-        this.onLoading.dispatch(this);
-
-        if (self.currentTemplate() && templateName === self.currentTemplate().name) {
-            onDispose = self.currentTemplate().dispose;
-            self.currentTemplate().dispose = function () { };
-            applyTemplate();
-        } else {
-            self.templateProvider.loadTemplate(templateName, function (status, statusCode, disposalFunction) {
-                if (status) {
-                    applyTemplate();
-                    onDispose = disposalFunction;
-                } else {
-                    self.onLoaded.dispatch(self, [false]);
-                    throw 'Failed to load template. The loadTemplate method returned a status code of ' + statusCode + '.';
-                }
-            });
-        }
-
-        if (reloadModel === true) {
-            loadModel(model, this.currentRouteValues(), self).done(function () {
-                applyTemplate();
-            }).fail(function (e) {
-                self.onLoaded.dispatch(self, [false]);
-                throw 'Failed to load view model.';
-            });
-        } else {
-            applyTemplate();
-        }
-    };
-
-    ViewRouter.prototype.navigateView = function (view, routeValues, model) {
-        /// <summary>Sets the current template by navigating the browser using the URL hash, optionally specifying a view model instance to bind.</summary>
-        /// <param name="view" type="String">The name of a view.</param>
-        /// <param name="routeValues" type="Object">Name/Value pairs to use as as the hash tag query.</param>
-        /// <param name="model" type="Object">If specified, the given model will be stored in viewData and used as the model to bind to the given view name.</param>
-        if (model) {
-            this.viewData.model = model;
-        }
-
-        this.routeProvider.setRouteValues(_(routeValues || {}).extend({ view: view }));
-    };
-
-    ViewRouter.prototype.getViewUrl = function (view, routeValues) {
-        /// <summary>Gets the URL to the given view, optionally specifying route values.</summary>
-        /// <param name="view" type="String">The name of a view.</param>
-        /// <param name="routeValues" type="Object">Name/Value pairs to use as as the hash tag query.</param>
-
-        return '#' + serializeRouteValues(_(routeValues || {}).extend({ view: view }));
-    };
-
-    ///#endregion    
+    //#endregion    
 
 })(window, ko);
