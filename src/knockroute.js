@@ -110,6 +110,7 @@
 
         var keyValuePattern = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
         var safeRegex = /[\\\+\.]/gi;
+        var optionalRegex = /\{([\w:])+\?\}/gi;
         var elementsRegex = /\{([\w:]+)\}/gi;
 
         var foo = fromString(route);
@@ -146,6 +147,7 @@
             }
 
             route = route.replace(safeRegex, '\\$&');
+            route = route.replace(optionalRegex, '($&)?');
             route = route.replace(/\*/gi, '.*');
 
             if (names.length <= 0) {
@@ -201,8 +203,10 @@
 
         if (res != null) {
             for (var i = 1; i < res.length; i++) {
-                values[this.elements[idx].name] = Route.parseKeyValue(res[i], this.elements[idx].type);
-                idx++;
+                if (res[i]) {
+                    values[this.elements[idx].name] = Route.parseKeyValue(res[i], this.elements[idx].type);
+                    idx++;
+                }
             }
         }
 
@@ -457,17 +461,65 @@
         template.text = '';
     };
 
+    jQueryTemplateProvider.prototype.getOrCreateTemplate = function (templateID, dataSrc, container) {
+        var template = window.document.getElementById(templateID);
+
+        container = container || window.document.body;
+
+        if (template){
+            return template;
+        }
+
+        template = window.document.createElement("script");
+        template.type = "text/html";
+        template.id = templateID;
+        template.setAttribute("data-src", dataSrc);
+
+        container.appendChild(template);
+        
+        return template;        
+    }
+
     if (typeof jQuery !== 'undefined') {
         kr.jQueryTemplateProvider = jQueryTemplateProvider;
     }
 
     function View(name, model, templateID, singleton) {
+        /// <signature>
+        /// <summary>Initializes a new instance of the View object with the given attributes.</summary>
+        /// <param name="name" type="String">A unique name for the view that will typically show up in the URL.</param>
+        /// <param name="model" type="Object">A constructor function or instance used as the view model.</param>
+        /// <param name="templateID" type="String">The element id of the HTML template that will be bound to the view model.</param>
+        /// <param name="singleton" type="Boolean" optional="true">True if a single instance of the view model should be maintained, false otherwise.</param>
+        /// </signature>
+        /// <signature>
+        /// <summary>Initializes a new instance of the View object with the given attributes.</summary>
+        /// <param name="attributes" type="Object"></param>
+        /// </signature>
         var self = this;
-        self.name = name;
-        self.model = model;
+        var props;
+        var defaultProps = {
+            singleton: false,
+            templateSrc: null
+        };        
+
+        if (arguments.length === 1 && typeof name === 'object') {
+            props = kr.utils.defaults(defaultProps, name);
+        } else {
+            props = kr.utils.defaults(defaultProps, {
+                name: name,
+                model: model,
+                templateID: templateID,
+                singleton: singleton
+            });
+        }       
+                
+        self.name = props.name;
+        self.model = props.model;
         self.modelInstance = null;
-        self.templateID = templateID;
-        self.singleton = singleton;
+        self.templateID = props.templateID;
+        self.singleton = props.singleton;
+        self.templateSrc = props.templateSrc;
     }
 
     View.prototype.loadModel = function (routeValues, callback) {
@@ -523,14 +575,17 @@
         /// <param name="options" type="Object"></param>
         var self = this;
 
-        var defaultOptions = {            
+        var defaultOptions = {      
             defaultRoute: '/{view}/{id}',
             defaultRouteValues: {
                 view: 'index'                
             },
             viewRouteKey: 'view',
+            views: [],
             pathProvider: 'hash',
-            templateProvider: 'jQuery'
+            templateProvider: 'jQuery',
+            createTemplates: false,
+            templateContainer: null
         };
 
         var defaultView = new kr.View('',{}, '', null, false);            
@@ -573,7 +628,7 @@
             });
             
             self.templateProvider.loadTemplate(view.templateID, function (response) {
-                if (response.success) {
+                if (response.success) {                    
                     apply();
                 } else {
                     throw "The template for view '" + view.name + "' failed to load with status: " + response.statusCode;
@@ -600,6 +655,7 @@
         }
 
         function onPathChanged(path) {
+            console.log('new path:' + path);
             /// <param name="path" type="String"></param>
             var route = getFirstMatchingRoute(path);
             var routeValues;
@@ -641,12 +697,14 @@
         });
 
         if (options.views && options.views.length) {
-            self.views = self.views.concat(options.views);
+            for (var i = 0; i < options.views.length; i++) {
+                if (options.views[i] instanceof kr.View) {
+                    self.views.push(options.views[i]);
+                } else {
+                    self.views.push(new kr.View(options.views[i]));
+                }
+            }
         }
-        
-        self.routeValues = ko.computed(function () {
-            return currentView().routeValues;
-        });
 
         if (typeof options.pathProvider === 'object') {
             self.pathProvider = options.pathProvider;
@@ -661,7 +719,7 @@
         } else {
             self.templateProvider = new kr.jQueryTemplateProvider();
         }
-       
+                       
         self.modelFactory = new DefaultModelFactory();
 
         self.dispose = function () {
@@ -682,6 +740,18 @@
 
         var pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
         self.pathProvider.start();
+
+        if (options.createTemplates) {
+            for (var i = 0 ; i < self.views.length; i++) {
+                if (self.views[i].templateSrc) {
+                    self.templateProvider.getOrCreateTemplate(
+                        self.views[i].templateID,
+                        self.views[i].templateSrc,
+                        options.templateContainer
+                    );
+                }
+            }
+        }
 
         //#endregion
     }
