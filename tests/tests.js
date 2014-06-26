@@ -201,7 +201,6 @@ QUnit.asyncTest('TestHashPathStringProvider', function (assert) {
             window.setTimeout(function () {
                 assert.strictEqual(window.location.hash, '#/foo/bar');
                 assert.strictEqual(psp.getPath(), '/foo/bar');
-
                 QUnit.start();
             });
         }, 20);
@@ -210,16 +209,21 @@ QUnit.asyncTest('TestHashPathStringProvider', function (assert) {
 
 QUnit.asyncTest('TestHashPathStringProviderEvents', function (assert) {
     var psp = new kr.HashPathStringProvider();
-    expect(1);
+    expect(2);
 
     window.location.hash = '#';
     psp.start();
 
-    psp.pathChanged.subscribe(function (path) {
+    var evt = psp.pathChanged.subscribe(function (path) {
         assert.strictEqual(path, 'foobar');
         psp.stop();
-        window.location.hash = '#';
-        QUnit.start();
+        evt.dispose();
+        psp.revert();
+
+        window.setTimeout(function () {
+            assert.strictEqual(window.location.hash, '');
+            QUnit.start();
+        },20);
     });
 
     window.location.hash = '#foobar';
@@ -295,4 +299,96 @@ QUnit.asyncTest('TestjQueryTemplateProvider', function (assert) {
         });
     });
     
+});
+
+QUnit.test('TestViewRouterWithFakes', function(assert) {
+
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>')");
+    $('#qunit-fixture').append("<script type='text/html' id='template2' data-src='template.html'></script>')");
+    $('#qunit-fixture').append("<script type='text/html' id='template3' data-src='should-not-exist.html'></script>')");
+
+    function FakePathProvider() {
+        var self = this;
+        var lastPath = '';
+        var _path = '';
+
+        self.pathChanged = new ko.subscribable();
+                        
+        self.setPath = function (path) {            
+            _path = path;
+        };
+
+        self.getPath = function () {
+            return _path;
+        };
+
+        self.start = function () {
+            // subscribe to the hashchange event if useRouteValues
+            hashChanged();
+        };
+
+        self.stop = function () {
+        };
+
+        self.revert = function (callback) {
+            self.setPath(lastPath);
+            callback();
+        };
+               
+        function hashChanged() {
+            path = self.getPath();
+            self.pathChanged.notifySubscribers(path);
+            lastPath = path;
+        }
+
+        self.fakeChange = function (path) {
+            _path = path;
+            hashChanged();
+        };
+    }
+
+    function FakeTemplateProvider() {
+        var self = this;
+    }
+
+    FakeTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
+        var response = {
+            success: true,
+            statusCode: 200,
+            template: $('#'+ templateID)[0]
+        };
+                
+        completeCallback(response);        
+    };
+
+    FakeTemplateProvider.prototype.unloadTemplate = function (template) {
+        
+    };
+
+    function TestModel($router){
+        var self = this;
+
+        self.message = ko.observable('Hello World');
+
+        self.load = function (routeValues) {
+            self.message('Hello ' + routeValues.id);
+            return true;
+        };
+    };
+
+    var router = new kr.ViewRouter({
+        views: [
+            new kr.View('index', TestModel, 'template1', false),
+            new kr.View('view1', TestModel, 'template2', false),
+            new kr.View('view2', TestModel, 'template3', false)
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider()
+    });
+        
+    assert.strictEqual(router.view().name, 'index');
+    assert.strictEqual(router.view().modelInstance.message(), 'Hello World');
+
+    router.pathProvider.fakeChange('/index/Justin');
+    assert.strictEqual(router.view().modelInstance.message(), 'Hello Justin');
 });

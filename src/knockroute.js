@@ -61,6 +61,42 @@
         }
         return '?'+pairs.join('&');
     }
+
+    kr.utils.nowOrThen = function(result, success, fail) {
+        if (typeof result === 'boolean') {
+            if (result) {
+                success();
+            } else {
+                fail();
+            }
+        } else if (typeof result === 'object' && typeof result.done === 'function') {
+            result.done(success).fail(fail);
+        } else if (typeof result === 'object' && typeof result.then === 'function') {
+            result.then(success, fail);
+        } else {
+            fail();
+        }
+    };
+
+    kr.utils.attachEvent = function (element, event, handler) {
+        if (element.addEventListener) {
+            element.addEventListener(event, handler, false);
+        } else if (element.attachEvent) {
+            element.attachEvent('on' + event, handler);
+        } else {
+            throw 'No event subscription method available.';
+        }
+    }
+
+    kr.utils.detachEvent = function (element, event, handler) {
+        if (element.removeEventListener) {
+            element.removeEventListener(event, handler, false);
+        } else if (element.detachEvent) {
+            element.detachEvent('on' + event, handler);
+        } else {
+            throw 'No event subscription method available.';
+        }
+    }
         
     function Route(route, defaults, options) {
         /// <param name="route" type="String"/>
@@ -225,12 +261,12 @@
 
     function HashPathStringProvider() {
         var self = this;
+        var lastPath = '';
 
         self.pathChanged = new ko.subscribable();
                         
         self.setPath = function (path) {            
             window.location.hash = '#' + path;
-            self.pathChanged.notifySubscribers(path);
         };
 
         self.getPath = function () {
@@ -239,31 +275,25 @@
 
         self.start = function () {
             // subscribe to the hashchange event if useRouteValues
-            if (window.addEventListener) {
-                window.addEventListener('hashchange', hashChanged, false);
-            } else if (window.attachEvent) {
-                window.attachEvent('onhashchange', hashChanged);
-            } else {
-                throw 'No hash change event subscription method available.';
-            }
+            kr.utils.attachEvent(window, 'hashchange', hashChanged);            
+            hashChanged();
         };
 
         self.stop = function () {
             // subscribe to the hashchange event if useRouteValues
-            if (window.removeEventListener) {
-                window.removeEventListener('hashchange', hashChanged, false);
-            } else if (window.detachEvent) {
-                window.detachEvent('onhashchange', hashChanged);
-            } else {
-                throw 'No hash change event subscription method available.';
-            }
+            kr.utils.detachEvent(window, 'hashchange', hashChanged);
+        };
+
+        self.revert = function (callback) {
+            self.setPath(lastPath);
+            window.setTimeout(callback, 20);
         };
                
         function hashChanged() {
-            self.pathChanged.notifySubscribers(self.getPath());
+            path = self.getPath();
+            self.pathChanged.notifySubscribers(path);
+            lastPath = path;
         }
-
-        hashChanged();
     }
 
     kr.HashPathStringProvider = HashPathStringProvider;
@@ -271,6 +301,7 @@
 
     function HistoryPathStringProvider(options) {
         var self = this;
+        var lastPath = '';
 
         var defaultOptions = {
             basePath: '^'
@@ -291,24 +322,18 @@
 
         self.start = function () {
             // subscribe to the hashchange event if useRouteValues
-            if (window.addEventListener) {
-                window.addEventListener('popstate', handlePopState, false);
-            } else if (window.attachEvent) {
-                window.attachEvent('onpopstate', handlePopState);
-            } else {
-                throw 'No hash change event subscription method available.';
-            }
+            kr.utils.attachEvent(window, 'popstate', handlePopState);
+            handlePopState();
         };
 
         self.stop = function () {
             // subscribe to the hashchange event if useRouteValues
-            if (window.removeEventListener) {
-                window.removeEventListener('popstate', handlePopState, false);
-            } else if (window.detachEvent) {
-                window.detachEvent('onpopstate', handlePopState);
-            } else {                
-                throw 'No hash change event subscription method available.';
-            }
+            kr.utils.detachEvent(window, 'popstate', handlePopState);            
+        };
+
+        self.revert = function (callback) {
+            self.setPath(lastPath);
+            window.setTimeout(callback, 20);
         };
 
         function extractBase(path) {
@@ -332,10 +357,10 @@
         }
                
         function handlePopState() {
-            self.pathChanged.notifySubscribers(self.getPath());
+            var path = self.getPath();
+            self.pathChanged.notifySubscribers(path);
+            lastPath = path;
         }
-
-        handlePopState();
     };
 
     kr.HistoryPathStringProvider = HistoryPathStringProvider;
@@ -435,6 +460,59 @@
     if (typeof jQuery !== 'undefined') {
         kr.jQueryTemplateProvider = jQueryTemplateProvider;
     }
+
+    function View(name, model, templateID, singleton) {
+        var self = this;
+        self.name = name;
+        self.model = model;
+        self.modelInstance = null;
+        self.templateID = templateID;
+        self.singleton = singleton;
+    }
+
+    View.prototype.loadModel = function (routeValues, callback) {
+        var self = this;
+        if (typeof this.modelInstance === 'object' && typeof this.modelInstance.load === 'function') {
+            kr.utils.nowOrThen(this.modelInstance.load(routeValues), function () {
+                callback(true);
+            }, function () {
+                callback(false);
+            });
+        } else {
+            callback(true);
+        }
+    };
+
+    View.prototype.unloadModel = function (force, callback) {
+        var self = this;
+
+        function done(status) {
+            if ((model.singleton && force) || status) {
+                if (typeof self.modelInstance.dispose === 'function') {
+                    self.modelInstance.dispose();
+                }
+                self.modelInstance = null;
+                callback(true);
+            } else {
+                callback(false);
+            }            
+        }
+
+        if (this.modelInstance != null && typeof this.modelInstance.unload === 'function') {           
+            kr.utils.nowOrThen(this.modelInstance.unload(), function () {
+                done(true);
+            }, function () {
+                done(false);
+            });
+        } else if (force) {
+            self.modelInstance = null;
+            callback(true);
+        } else {
+            callback(true);
+        }
+    };
+        
+    kr.View = View;
     
     //#endregion
     
@@ -448,19 +526,14 @@
         var defaultOptions = {            
             defaultRoute: '/{view}/{id}',
             defaultRouteValues: {
-                view:'index'                
+                view: 'index'                
             },
             viewRouteKey: 'view',
             pathProvider: 'hash',
             templateProvider: 'jQuery'
         };
 
-        var defaultView = {
-            name: '',
-            model: {},
-            templateName: '',
-            routeValues: null
-        };
+        var defaultView = new kr.View('',{}, '', null, false);            
 
         kr.utils.defaults(defaultOptions, options);
 
@@ -468,13 +541,44 @@
 
         var currentView = ko.observable(defaultView);
 
-        function setCurrent(name, model, templateID, routeValues) {
-            currentView({
-                name: name,
-                model: model,
-                templateID: templateID,
-                routeValues: routeValues
+        function setCurrent(view, routeValues, cancel) {
+            var hit = 0;
+            var model = view.modelInstance || view.model || {};
+
+            if (view !== currentView()) {
+                currentView().unloadModel(false, function (status) {
+                    if (!status) {
+                        cancel();
+                    }
+                });
+            }
+
+            if (typeof model === 'function') {
+                view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
+            }
+            
+            function apply() {
+                hit++;
+                if (hit == 2) {
+                    currentView(view);
+                }
+            }            
+
+            view.loadModel(routeValues, function (status) {
+                if (status) {
+                    apply();
+                } else {
+                    throw "The model for view '" + view.name + "' failed to load.";
+                }
             });
+            
+            self.templateProvider.loadTemplate(view.templateID, function (response) {
+                if (response.success) {
+                    apply();
+                } else {
+                    throw "The template for view '" + view.name + "' failed to load with status: " + response.statusCode;
+                }
+            });            
         }
 
         function getFirstMatchingRoute(path) {
@@ -503,24 +607,22 @@
             if (route) {
                 routeValues = route.extractRouteValues(path);
             } else {
-                //TODO: make this not suck
-                throw 'No matching route defined.';
+                routeValues = options.defaultRouteValues;
             }
 
             var view = getFirstMatchingView(routeValues[options.viewRouteKey]);
-
+                        
             if (view == null) {
                 //TODO: make this not suck
                 throw 'No view available.'
             }
-
-            var model = view.model || {};
-
-            if (typeof model === 'function') {
-                model = self.modelFactory.createModel(model, [self, routeValues]);
-            }
-                                    
-            setCurrent(view.name, model, view.templateID, routeValues);
+                                   
+            setCurrent(view, routeValues, function () {
+                self.pathProvider.stop();
+                self.pathProvider.revert(function () {
+                    self.pathProvider.start();
+                });                
+            });
         }
 
         //#endregion
@@ -531,34 +633,60 @@
             new kr.Route(options.defaultRoute, options.defaultRouteValues)
         ];
 
-        self.views = [
-            { name: 'index', model: {}, templateID: '' }
-        ];
+        // Gets or sets the list of views
+        self.views = [];
 
+        self.view = ko.computed(function () {
+            return currentView();
+        });
+
+        if (options.views && options.views.length) {
+            self.views = self.views.concat(options.views);
+        }
+        
         self.routeValues = ko.computed(function () {
             return currentView().routeValues;
         });
 
-        if (options.pathProvider === 'history') {
+        if (typeof options.pathProvider === 'object') {
+            self.pathProvider = options.pathProvider;
+        } else if (options.pathProvider === 'history') {
             self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
         } else {
             self.pathProvider = new kr.HashPathStringProvider();
         }
         
-        if (options.templateProvider === 'jQuery') {
-            self.templateProvider = new kr.HashPathStringProvider();
+        if (typeof options.templateProvider === 'object') {
+            self.templateProvider = options.templateProvider;
         } else {
-            self.templateProvider = new kr.jQueryTemplateProvider(options.basePath);            
+            self.templateProvider = new kr.jQueryTemplateProvider();
         }
-
+       
         self.modelFactory = new DefaultModelFactory();
+
+        self.dispose = function () {
+            self.pathProvider.stop();
+            for (var i = 0; i < self.views.length; i++) {
+                self.views[i].unloadModel(true);
+            }
+            pathChangedEvent.dispose();
+        };
                 
         //#endregion
 
+        //#region Init
+
         onPathChanged(self.pathProvider.getPath());
-        //var isInitialized = false;
+
+        // begin watching for path changes
+
+        var pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
+        self.pathProvider.start();
+
+        //#endregion
     }
 
+    kr.ViewRouter = ViewRouter;
 
     //#endregion    
 
