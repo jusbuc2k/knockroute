@@ -101,67 +101,72 @@
     function Route(route, defaults, options) {
         /// <param name="route" type="String"/>
         /// <param name="options" type="Object"/>
-
+        var self = this;
         var defaultOptions = {
-            parseQueryString: true
+            pathSeperator: '/'
         };
 
         this.options = kr.utils.defaults(defaultOptions, options || {});
 
         var keyValuePattern = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
         var safeRegex = /[\\\+\.]/gi;
-        var optionalRegex = /\{([\w:])+\?\}/gi;
-        var elementsRegex = /\{([\w:]+)\}/gi;
+        var elementPattern = '\\{(\\w+)(:\\w+)?(\\??)\\}';
+        var literalRegex = /[\\w\\+\\.\\-]+'/i;
 
         var foo = fromString(route);
 
         this.route = route;
-        this.elements = foo.keys;
-        this.regex = foo.regex;        
-        this.defaults = defaults || {};
-               
+        this.elements = foo;
+        //this.regex = foo.regex;        
+        this.defaults = defaults || {};        
+              
         function fromString(route) {
             /// <param name="route" type="String">route string</param>            
-            var r = '^';
-
             var names = [];
-            var res;
-            var parts;
-            while ((res = elementsRegex.exec(route)) !== null) {
-                parts = res[1].split(':');
-                if (parts.length === 2) {
-                    names.push({
-                        name: parts[0],
-                        type: parts[1],
-                        index: res.index,
-                        length: res[0].length
-                    });
-                } else {
-                    names.push({
-                        name: res[1],
-                        type: 'string',
-                        index: res.index,
-                        length: res[0].length
-                    });
+            var len = 0;
+            var fieldParts;
+            var routeParts;
+
+            if (route.indexOf(self.options.pathSeperator) === 0) {
+                route = route.slice(self.options.pathSeperator.length);
+            }
+
+            routeParts = route.split(self.options.pathSeperator);
+
+            for (var i = 0; i < routeParts.length; i++) {                
+                if (routeParts[i]) {
+                    fieldParts = new RegExp(elementPattern, 'gi').exec(routeParts[i]);
+                    
+                    if (fieldParts) {
+                        names.push({
+                            name: fieldParts[1],                            
+                            optional: (fieldParts[3] === '?'),
+                            type: 'variable',
+                            dataType: (fieldParts[2] || ':string').slice(1),
+                            index: len,
+                            length: routeParts[i].length
+                        });
+                    } else if (literalRegex.test(routeParts[i])) {
+                        names.push({
+                            name: routeParts[i],
+                            optional: false,
+                            type: 'literal',
+                            dataType: 'string',
+                            index: len,
+                            length: routeParts[i].length
+                        });
+                    } else {
+                        throw "Invalid route segment value '" + routeParts[i] + "' encountered.";
+                    }
+
+                    len += routeParts[i].length;
                 }
             }
 
-            route = route.replace(safeRegex, '\\$&');
-            route = route.replace(optionalRegex, '($&)?');
-            route = route.replace(/\*/gi, '.*');
-
-            if (names.length <= 0) {
-                r = null;
-            } else {
-                r += route.replace(elementsRegex, '(' + keyValuePattern + ')');
-                r += '\\??.*';
-            }
-
-            return { regex: r, keys: names };
+            return names;
         }
     }
-
-
+    
     //#region Statics
 
     Route.parseKeyValue = function (value, type) {
@@ -177,8 +182,45 @@
 
     //#region Instance Methods
 
-    Route.prototype.match = function (path) {
-        return new RegExp(this.regex, 'gi').test(path);
+    Route.prototype.match = function (path, defaultValues) {
+        var pathSegments;
+        var routeSegments = this.elements;
+        var routeSegment;
+        var pathSegment;
+        var routeValues = {};
+                
+        pathSegments = (path[0] === this.options.pathSeperator) ? path.slice(1).split(this.options.pathSeperator) : path.split(this.options.pathSeperator)
+        
+        for (var i = 0; i < pathSegments.length; i++) {
+            pathSegment = pathSegments[i];
+            routeSegment = this.elements.length > i ? this.elements[i] : null;
+
+            if (routeSegment == null) {
+                // we are out of route segments, so there is nothing left to match, so give up.
+                if (pathSegment.length > 0) {
+                    return null;
+                }
+            } else {
+                if (routeSegment.type === 'literal') {
+                    if (routeSegment.name !== pathSegment) {
+                        return null;
+                    }
+                } else if (pathSegment.length > 0) {
+                    routeValues[routeSegment.name] = Route.parseKeyValue(pathSegment, routeSegment.dataType);
+                } else {
+                    var defaultValue;                    
+                    if (defaultValues && (defaultValue = defaultValues[routeSegment.name])) {
+                        routeValues[routeSegment.name] = defaultValue;
+                    } else if (routeSegment.optional) {
+                        // nothing to do since it's optional
+                    } else {
+                        return null;
+                    }
+                }
+            }
+        }
+
+        return routeValues;
     };
 
     Route.prototype.matchKeys = function (routeValues) {
@@ -209,14 +251,7 @@
                 }
             }
         }
-
-        if (this.options.parseQueryString) {
-            var qs = kr.utils.parseQueryString(path);
-            if (qs) {
-                kr.utils.defaults(qs, values);
-            }
-        }
-
+        
         return values;
     };
 

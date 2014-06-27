@@ -9,6 +9,19 @@ QUnit.done(function () {
     window.history.pushState({}, '', orig);
 });
 
+//QUnit.test('Experiment', function () {
+
+//    var route = '/beer/{bar:int}/{baz}.{ext?}';
+
+//    var regex = new RegExp('\\{(\\w+)(:\\w+)?(\\?)?\\}', 'gi');
+//    var res;
+
+//    while (res = regex.exec(route)) {
+//        console.log(res);
+//    }
+
+//});
+
 QUnit.test('TestNoConflict', function (assert) {
     expect(3);
 
@@ -43,63 +56,65 @@ QUnit.test('TestParseQueryString', function (assert) {
 });
 
 QUnit.test('TestParseRoute', function(assert) {
-    expect(8);
+    expect(4);
 
     var valueChars = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
     var suffix = '\\??.*';
     
     var goodRoute = new kr.Route('/{view}');
-    assert.strictEqual(goodRoute.regex, '^/(' + valueChars + ')' + suffix);
+    //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.elements.length, 1);
-        
-    var badRoute = new kr.Route('/{view');
-    assert.strictEqual(badRoute.regex, null);
-    assert.strictEqual(badRoute.elements.length, 0);
+    
+    assert.throws(function () {
+        var badRoute = new kr.Route('/{view');        
+    });
 
     goodRoute = new kr.Route('/{view}/{id}');
-    assert.strictEqual(goodRoute.regex, '^/(' + valueChars + ')/(' + valueChars + ')' + suffix);
+    //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.elements.length, 2);
 
     goodRoute = new kr.Route('/{view}/{id}/{bar}');
-    assert.strictEqual(goodRoute.regex, '^/(' + valueChars + ')/(' + valueChars + ')/(' + valueChars + ')' + suffix);
+    //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')/(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.elements.length, 3);
 });
 
 QUnit.test('TestMatch', function (assert) {
-    expect(12);
+    expect(16);
 
-    var path = '/Foo/123/Blah';
-
-    var route1 = new kr.Route('/{view}');
-    assert.ok(route1.match(path), 'Path should partial match');
-    var rv = route1.extractRouteValues(path);
-    assert.notEqual(rv, null);
-    assert.strictEqual(rv.view,'Foo');
+    var rv;
+    var route1 = new kr.Route('/{view}');    
+    assert.ok(rv = route1.match('Foo'), 'Path should match');
+    assert.strictEqual(rv.view, 'Foo');
+    assert.ok(route1.match('foo/bar') == null);
         
     var route2 = new kr.Route('/{view}/{id}');
-    assert.ok(route2.match(path), 'Path should partial match');
-    rv = route2.extractRouteValues(path);
+    assert.ok(rv = route2.match('/Foo/123'), 'Path should match');
     assert.notEqual(rv, null);
     assert.strictEqual(rv.view, 'Foo');
     assert.strictEqual(rv.id, '123');
+    assert.ok(route2.match('foo') != null);
+    assert.ok(route2.match('foo/bar/test') == null);
 
     var route3 = new kr.Route('/{view}/{id}/{bar}');
-    assert.ok(route3.match(path), 'Path should exact match');
-    rv = route3.extractRouteValues(path);
+    assert.ok(rv = route3.match('Foo/123/Blah'), 'Path should match');
     assert.notEqual(rv, null);
     assert.strictEqual(rv.view, 'Foo');
     assert.strictEqual(rv.id, '123');
     assert.strictEqual(rv.bar, 'Blah');
+    assert.ok(route3.match('foo') != null);
+    assert.ok(route3.match('foo/bar') != null);    
 });
 
 QUnit.test('TestOptionalKeys', function (assert) {
-    expect(4);
+    expect(5);
 
     var path = '/Foo/?bar=123';
     var route = new kr.Route('/{view}/{id?}');
     var rv = route.extractRouteValues(path);
+           
     assert.strictEqual(route.match(path), true);
     assert.strictEqual(route.match('/Foo'), true);
+    assert.strictEqual(route.match('/Foo/'), true);
     assert.strictEqual(rv.view, 'Foo');
     assert.strictEqual(rv.bar, '123');
                 
@@ -153,7 +168,7 @@ QUnit.test('TestRouteSpecialCharacters', function (assert) {
     expect(6);
 
     var path = 'a b c-d*ef+[123]&9{9}9.t$x$t?foo=bar&test=bill';
-    var route = new kr.Route('{foo}-{bar}+{baz}&{blah}.{ext}');
+    var route = new kr.Route('{foo}-{bar}-{baz}-{blah}-{ext}');
     assert.strictEqual(route.match(path), true);
     
     var rv = route.extractRouteValues(path);
