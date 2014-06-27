@@ -11,6 +11,8 @@
         return kr;
     };
 
+    //#region Defaults
+
     kr.utils = kr.utils || {};
 
     kr.utils.defaults = function (defaults, options) {
@@ -22,19 +24,17 @@
         return options;
     };
 
-    kr.utils.parseQueryString = function (path) {
+    kr.utils.parseQueryString = function (query) {
         var pairs = {};
 
-        var idx = (path || '').indexOf('?');
+        var idx = (query || '').indexOf('?');
         var count = 0;
-        if (idx > 0) {
-            path = path.substr(idx + 1);
-        } else {
-            return null;
-        }       
+        if (idx >= 0) {
+            query = query.slice(idx + 1);
+        }      
 
-        if (typeof (path) !== 'undefined') {
-            var tokens = path.split('&');
+        if (typeof (query) !== 'undefined') {
+            var tokens = query.split('&');
             var pair;
             for (var i = 0; i < tokens.length; i++) {
                 pair = tokens[i].split("=");
@@ -52,14 +52,14 @@
         }
     }
 
-    kr.utils.serializeQueryString = function (hashTable) {
+    kr.utils.serializeQueryString = function (nvc) {        
         var pairs = [];
-        for (var key in hashTable) {
-            if (hashTable.hasOwnProperty(key)) {
-                pairs.push(key + '=' + hashTable[key]);
+        for (var key in nvc) {
+            if (nvc.hasOwnProperty(key)) {
+                pairs.push(key + '=' + nvc[key]);
             }
         }
-        return '?'+pairs.join('&');
+        return pairs.join('&');
     }
 
     kr.utils.nowOrThen = function(result, success, fail) {
@@ -69,9 +69,9 @@
             } else {
                 fail();
             }
-        } else if (typeof result === 'object' && typeof result.done === 'function') {
+        } else if (result != null && typeof result.done === 'function') {
             result.done(success).fail(fail);
-        } else if (typeof result === 'object' && typeof result.then === 'function') {
+        } else if (result != null && typeof result.then === 'function') {
             result.then(success, fail);
         } else {
             fail();
@@ -97,77 +97,19 @@
             throw 'No event subscription method available.';
         }
     }
-        
-    function Route(route, defaults, options) {
-        /// <param name="route" type="String"/>
-        /// <param name="options" type="Object"/>
-        var self = this;
-        var defaultOptions = {
-            pathSeperator: '/'
-        };
 
-        this.options = kr.utils.defaults(defaultOptions, options || {});
+    //#endregion
 
-        var keyValuePattern = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
-        var safeRegex = /[\\\+\.]/gi;
-        var elementPattern = '\\{(\\w+)(:\\w+)?(\\??)\\}';
-        var literalRegex = /[\\w\\+\\.\\-]+'/i;
+    //#region pseudo-constants
 
-        var foo = fromString(route);
+    var keyValuePattern = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
+    var safeRegex = /[\\\+\.]/gi;
+    var elementPattern = '\\{(\\w+)(:\\w+)?(\\??)\\}';
+    var literalRegex = /[\\w\\+\\.\\-]+'/i;
 
-        this.route = route;
-        this.elements = foo;
-        //this.regex = foo.regex;        
-        this.defaults = defaults || {};        
-              
-        function fromString(route) {
-            /// <param name="route" type="String">route string</param>            
-            var names = [];
-            var len = 0;
-            var fieldParts;
-            var routeParts;
+    //#endregion
 
-            if (route.indexOf(self.options.pathSeperator) === 0) {
-                route = route.slice(self.options.pathSeperator.length);
-            }
-
-            routeParts = route.split(self.options.pathSeperator);
-
-            for (var i = 0; i < routeParts.length; i++) {                
-                if (routeParts[i]) {
-                    fieldParts = new RegExp(elementPattern, 'gi').exec(routeParts[i]);
-                    
-                    if (fieldParts) {
-                        names.push({
-                            name: fieldParts[1],                            
-                            optional: (fieldParts[3] === '?'),
-                            type: 'variable',
-                            dataType: (fieldParts[2] || ':string').slice(1),
-                            index: len,
-                            length: routeParts[i].length
-                        });
-                    } else if (literalRegex.test(routeParts[i])) {
-                        names.push({
-                            name: routeParts[i],
-                            optional: false,
-                            type: 'literal',
-                            dataType: 'string',
-                            index: len,
-                            length: routeParts[i].length
-                        });
-                    } else {
-                        throw "Invalid route segment value '" + routeParts[i] + "' encountered.";
-                    }
-
-                    len += routeParts[i].length;
-                }
-            }
-
-            return names;
-        }
-    }
-    
-    //#region Statics
+    //#region Route
 
     Route.parseKeyValue = function (value, type) {
         switch (type) {
@@ -178,19 +120,105 @@
         }
     }
 
-    //#endregion
+    Route.parseTemplate = function (routeTemplate, pathSeperator) {
+        /// <param name="route" type="String">route string</param>            
+        var routeSegments = [];
+        var templateSegments;
+        var hasOptional = false;
 
-    //#region Instance Methods
+        if (routeTemplate.indexOf(pathSeperator) === 0) {
+            routeTemplate = routeTemplate.slice(pathSeperator.length);
+        }
 
-    Route.prototype.match = function (path, defaultValues) {
-        var pathSegments;
-        var routeSegments = this.elements;
-        var routeSegment;
-        var pathSegment;
-        var routeValues = {};
-                
-        pathSegments = (path[0] === this.options.pathSeperator) ? path.slice(1).split(this.options.pathSeperator) : path.split(this.options.pathSeperator)
+        templateSegments = routeTemplate.split(pathSeperator);
+
+        for (var i = 0; i < templateSegments.length; i++) {
+            if (templateSegments[i]) {
+                var tmp;
+                var segParts = [];
+                var reg = new RegExp(elementPattern, 'gi');
+
+                while (tmp = reg.exec(templateSegments[i])) {
+                    segParts.push(tmp);
+                }
+
+                if (segParts.length === 1) {
+                    var optional = false;
+                    routeSegments.push({
+                        value: templateSegments[i],
+                        parts: [{
+                            name: segParts[0][1],
+                            optional: optional = (segParts[0][3] === '?'),
+                            type: 'variable',
+                            dataType: (segParts[0][2] || ':string').slice(1)
+                        }]
+                    });
+                    if (hasOptional && !optional) {
+                        throw 'Invalid route template: A required segment cannot follow an optional one.';
+                    }
+                    hasOptional = hasOptional || optional;
+                } else if (segParts.length > 1) {
+                    throw 'Invalid route template: Multi-part route segments are not implemented';
+                } else if (literalRegex.test(templateSegments[i])) {
+                    routeSegments.push({
+                        value: templateSegments[i],
+                        parts: [
+                            { name: templateSegments[i], optional: false, type: 'literal', dataType: 'string' }
+                        ]
+                    });
+                } else if (templateSegments[i] === '*') {                    
+                    routeSegments.push({
+                        value: templateSegments[i],
+                        parts: [
+                            { name: templateSegments[i], optional: false, type: 'wildcard', dataType: 'string' }
+                        ]
+                    });
+                } else {
+                    throw "Invalid route template: The segment value '" + templateSegments[i] + "' is invalid.";
+                }
+            }
+        }
+
+        return routeSegments;
+    };
         
+    function Route(routeTemplate, options) {
+        /// <param name="route" type="String"/>
+        /// <param name="options" type="Object"/>
+        var self = this;
+        var defaultOptions = {
+            pathSeperator: '/'
+        };
+
+        options = this.options = kr.utils.defaults(defaultOptions, options || {});
+               
+        this.routeTemplate = routeTemplate;
+        this.elements = Route.parseTemplate(routeTemplate, options.pathSeperator);
+    }
+       
+    Route.prototype.match = function (path, defaultValues) {
+        /// <param name="path" type="String"/>
+        /// <param name="defaultValues" type="Object"/>               
+        var pathSegments;
+        var pathSegment;
+        var routeSegment;
+        var routeValues = {};
+
+        if (path == null) {
+            throw 'A value for path must be specified.';
+        }
+
+        if (path.indexOf(this.options.pathSeperator) === 0) {
+            path = path.slice(this.options.pathSeperator.length);
+        }
+
+        var queryIndex = -1;
+        if ((queryIndex = path.indexOf('?')) >= 0) {
+            path = path.slice(0, queryIndex);
+        }
+
+        pathSegments = path.split(this.options.pathSeperator);
+                                        
         for (var i = 0; i < pathSegments.length; i++) {
             pathSegment = pathSegments[i];
             routeSegment = this.elements.length > i ? this.elements[i] : null;
@@ -200,103 +228,99 @@
                 if (pathSegment.length > 0) {
                     return null;
                 }
-            } else {
-                if (routeSegment.type === 'literal') {
-                    if (routeSegment.name !== pathSegment) {
+            } else if (routeSegment.parts.length === 1) {
+                var part = routeSegment.parts[0];
+                if (part.type === 'literal') {
+                    if (part.name !== pathSegment) {
                         return null;
                     }
-                } else if (pathSegment.length > 0) {
-                    routeValues[routeSegment.name] = Route.parseKeyValue(pathSegment, routeSegment.dataType);
-                } else {
-                    var defaultValue;                    
-                    if (defaultValues && (defaultValue = defaultValues[routeSegment.name])) {
-                        routeValues[routeSegment.name] = defaultValue;
-                    } else if (routeSegment.optional) {
+                } else if (part.type === 'wildcard') {
+                    // nothing to do
+                } else if (part.type === 'variable' && pathSegment.length > 0) {
+                    routeValues[part.name] = Route.parseKeyValue(pathSegment, part.dataType);
+                } else if (part.type === 'variable') {
+                    var defaultValue;
+                    if (defaultValues && (defaultValue = defaultValues[part.name])) {
+                        routeValues[part.name] = defaultValue;
+                    } else if (part.optional) {
                         // nothing to do since it's optional
                     } else {
                         return null;
                     }
+                } else {
+                    // invalid route segment part
+                    return null;
                 }
+            } else {
+                throw 'Multi-part route segments are not implemented';
             }
         }
 
         return routeValues;
     };
 
-    Route.prototype.matchKeys = function (routeValues) {
-        var count = 0;      
+    Route.prototype.resolve = function (routeValues, currentPath) {
+        /// <param name="routeValues" type="Object"/>
+        /// <param name="defaultValues" type="Object" optional="true"/>
+        /// <param name="currentPath" type="String" optional="true"/>
+        var pathParts = [];
+
+        var currentPathSegements;
+        var currentSegment;
+        var routeSegment;
+        var routePart;
+
+        if (currentPath != null) {
+            if (currentPath[0] === this.options.pathSeperator) {
+                currentPath = currentPath.slice(1);
+            }
+            currentPathSegements = currentPath.split(this.options.pathSeperator);
+        }
 
         for (var i = 0; i < this.elements.length; i++) {
-            if (routeValues.hasOwnProperty(this.elements[i].name)) {
-                count++;
-            }
-        }
+            routeSegment = this.elements[i];
+            currentSegment = currentPathSegements ? currentPathSegements[i] : null;
 
-        return count;
-    };
+            if (routeSegment.parts.length === 1) {
+                routePart = routeSegment.parts[0];
+                if (routePart.type === 'wildcard') {
+                    if (currentSegment && currentSegment.length > 0) {
+                        pathParts.push(currentSegment);
+                    } else {
+                        return null;
+                    }
+                } else if (routePart.type === 'literal') {
+                    pathParts.push(routePart.name);
+                } else if (routePart.type === 'variable') {
+                    if (routeValues.hasOwnProperty(routePart.name)) {
+                        pathParts.push(routeValues[routePart.name]);
+                    } else if (routePart.optional) {
 
-    Route.prototype.extractRouteValues = function (path) {
-        var values = {};
-        var res;
-        var idx = 0;
-        var regex = new RegExp(this.regex, 'gi');
-
-        var res = regex.exec(path);
-
-        if (res != null) {
-            for (var i = 1; i < res.length; i++) {
-                if (res[i]) {
-                    values[this.elements[idx].name] = Route.parseKeyValue(res[i], this.elements[idx].type);
-                    idx++;
+                    } else {
+                        return null;
+                    }
                 }
+            } else {
+                throw 'Multi-part route segments are not supported.';
             }
         }
-        
-        return values;
-    };
+        //for (var i = this.elements.length - 1; i >= 0; i--) {
+        //    for (var y = 0; y < this.elements[i].parts.length; y++) {
+        //        if (routeValues.hasOwnProperty(this.elements[i].parts[y].name)) {
+        //            path = path.replace('{' + this.elements[i].parts[y].name + '}', routeValues[this.elements[i].parts[y].name]);
+        //            used.push(this.elements[i].parts[y].name);
+        //        }
+        //    }
+        //}
 
-    Route.prototype.resolve = function (routeValues) {
-        /// <param name="routeValues" type="Object"/>
-        var path = this.route;
-
-        var keys = [];
-        var used = [];
-
-        routeValues = kr.utils.defaults(this.defaults, routeValues);
-
-        for (var key in routeValues) {
-            if (routeValues.hasOwnProperty(key)) {
-                keys.push(key);
-            }
-        }
-
-        for (var i = this.elements.length - 1; i >= 0; i--) {
-            if (routeValues.hasOwnProperty(this.elements[i].name)) {
-                path = path.substr(0, this.elements[i].index) + routeValues[this.elements[i].name] + path.substr(this.elements[i].index + this.elements[i].length);
-                used.push(this.elements[i].name);
-            }
-        }
-        
-        if (this.options.parseQueryString && used.length < keys.length){
-            var queryString = {};
-
-            for (var key in routeValues) {
-                if (routeValues.hasOwnProperty(key) && used.indexOf(key) < 0) {
-                    queryString[key] = routeValues[key];
-                }
-            }
-
-            path += kr.utils.serializeQueryString(queryString);
-        }
-
-        return path;
+        return pathParts.join(this.options.pathSeperator);
     }
 
     kr.Route = Route;
 
     //#endregion
         
-    //#Default Providers
+    //#region Default Providers
 
     function HashPathStringProvider() {
         var self = this;
@@ -325,19 +349,18 @@
 
         self.revert = function (callback) {
             self.setPath(lastPath);
-            window.setTimeout(callback, 20);
+            if (typeof callback === 'function') {
+                window.setTimeout(callback, 20);
+            }
         };
                
         function hashChanged() {
-            path = self.getPath();
+            var path = self.getPath();
             self.pathChanged.notifySubscribers(path);
             lastPath = path;
         }
     }
-
-    kr.HashPathStringProvider = HashPathStringProvider;
-
-
+    
     function HistoryPathStringProvider(options) {
         var self = this;
         var lastPath = '';
@@ -402,8 +425,6 @@
         }
     };
 
-    kr.HistoryPathStringProvider = HistoryPathStringProvider;
-
     function DefaultModelFactory() {
         var self = this;
     };
@@ -421,7 +442,7 @@
             throw 'constructor must be a valid constructor function.'
         }
     };  
-
+    
     function jQueryTemplateProvider() {
         var self = this;
 
@@ -515,9 +536,15 @@
         return template;        
     }
 
+    kr.HashPathStringProvider = HashPathStringProvider;
+    kr.HistoryPathStringProvider = HistoryPathStringProvider;
     if (typeof jQuery !== 'undefined') {
         kr.jQueryTemplateProvider = jQueryTemplateProvider;
     }
+
+    //#endregion
+
+    //#region View
 
     function View(name, model, templateID, singleton) {
         /// <signature>
@@ -600,7 +627,7 @@
     };
         
     kr.View = View;
-    
+
     //#endregion
     
     //#region View Router
@@ -671,13 +698,28 @@
             });            
         }
 
-        function getFirstMatchingRoute(path) {
+        function getRouteValues(path) {
+            var rv;
+            var qs;
+
             for (var i = 0; i < self.routes.length; i++) {
-                if (self.routes[i].match(path)) {
-                    return self.routes[i];
+                if (rv = self.routes[i].match(path, options.defaultRouteValues)) {
+                    break;
                 }
             }
-            return self.routes[-1];
+
+            if (rv == null) {
+                return null;
+            }
+
+            qs = kr.utils.parseQueryString(path);
+            rv = kr.utils.defaults(qs, rv);
+                        
+            return rv;
+        }
+
+        function resolve(routeValues) {
+
         }
 
         function getFirstMatchingView(viewName) {
@@ -690,16 +732,8 @@
         }
 
         function onPathChanged(path) {
-            console.log('new path:' + path);
             /// <param name="path" type="String"></param>
-            var route = getFirstMatchingRoute(path);
-            var routeValues;
-
-            if (route) {
-                routeValues = route.extractRouteValues(path);
-            } else {
-                routeValues = options.defaultRouteValues;
-            }
+            var routeValues = getRouteValues(path);
 
             var view = getFirstMatchingView(routeValues[options.viewRouteKey]);
                         

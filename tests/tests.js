@@ -9,19 +9,6 @@ QUnit.done(function () {
     window.history.pushState({}, '', orig);
 });
 
-//QUnit.test('Experiment', function () {
-
-//    var route = '/beer/{bar:int}/{baz}.{ext?}';
-
-//    var regex = new RegExp('\\{(\\w+)(:\\w+)?(\\?)?\\}', 'gi');
-//    var res;
-
-//    while (res = regex.exec(route)) {
-//        console.log(res);
-//    }
-
-//});
-
 QUnit.test('TestNoConflict', function (assert) {
     expect(3);
 
@@ -35,33 +22,122 @@ QUnit.test('TestNoConflict', function (assert) {
     window.kr = tmp;
 });
 
-QUnit.module('Route');
+QUnit.module('Utils');
 
-QUnit.test('TestParseQueryString', function (assert) {
-    expect(5);
+QUnit.test('defaults', function (assert) {
+    expect(4);
 
-    var qs = kr.utils.parseQueryString('/foo/bar/?test=123&foo=bar');
+     var defaults = {
+        a: 1,
+        b: 1,
+        c: 1
+     };
+     var options = {
+         a: 9,
+         c: 8
+     };
 
-    assert.strictEqual(qs.test, '123');
-    assert.strictEqual(qs.foo, 'bar');
-
-    qs = kr.utils.parseQueryString('/foo/bar/test=123&foo=bar');   
-    assert.ok(qs == null);
-
-    qs = kr.utils.parseQueryString(null);        
-    assert.ok(qs == null);
-
-    qs = kr.utils.parseQueryString('');
-    assert.ok(qs == null);
+     var opts = kr.utils.defaults(defaults, options);
+     assert.strictEqual(opts, options, 'objects should be ref equivalent');
+     assert.strictEqual(options.a, 9);
+     assert.strictEqual(options.b, 1);
+     assert.strictEqual(options.c, 8);
 });
 
+QUnit.test('queryString', function (assert) {
+    expect(13);
+
+    var qs;
+
+    assert.ok(qs = kr.utils.parseQueryString('foo=bar'));
+    assert.strictEqual(qs.foo, 'bar');
+    assert.strictEqual(kr.utils.serializeQueryString(qs), 'foo=bar');
+
+    assert.ok(qs = kr.utils.parseQueryString('?bar=foo'));
+    assert.strictEqual(qs.bar, 'foo');
+    assert.strictEqual(kr.utils.serializeQueryString(qs), 'bar=foo');
+    
+    assert.ok(qs = kr.utils.parseQueryString('/blah/blah?foo=bar'));
+    assert.strictEqual(qs.foo, 'bar');
+    assert.strictEqual(kr.utils.serializeQueryString(qs), 'foo=bar');
+
+    assert.ok(qs = kr.utils.parseQueryString('?foo=bar&beer=nuts'));
+    assert.strictEqual(qs.foo, 'bar');
+    assert.strictEqual(qs.beer, 'nuts');
+    assert.strictEqual(kr.utils.serializeQueryString(qs), 'foo=bar&beer=nuts');
+});
+
+QUnit.test('nowOrThen', function (assert) {
+    expect(9);
+
+    var sHit = 0;
+    var success = function () {
+        sHit++;
+    };
+
+    var fHit = 0;
+    var fail = function () {
+        fHit++;
+    };
+
+    var promise = {
+        then: function (s, f) {
+            assert.strictEqual(s, success);
+            assert.strictEqual(f, fail);
+        }
+    };
+
+    var jqd = {
+        done: function (s) {
+            assert.strictEqual(s, success);
+            return jqd;
+        },
+        fail: function (f) {
+            assert.strictEqual(f, fail);
+            return jqd;
+        }
+    };
+
+    kr.utils.nowOrThen(true, success, fail);
+    assert.strictEqual(sHit, 1);
+    kr.utils.nowOrThen(false, success, fail);
+    assert.strictEqual(fHit, 1);
+
+    kr.utils.nowOrThen(promise, success, fail);
+    assert.strictEqual(sHit, 1);
+    kr.utils.nowOrThen(jqd, success, fail);
+    assert.strictEqual(fHit, 1);
+
+    kr.utils.nowOrThen(null, success, fail);
+    assert.strictEqual(fHit, 2);
+   
+});
+
+QUnit.test('events', function (assert) {
+    expect(1);
+
+    var btn = document.createElement('button');
+    $('#qunit-fixture').append(btn);
+
+    var handler = function(e) {        
+        assert.ok(e);
+    };
+    
+    kr.utils.attachEvent(btn, 'click', handler);
+    btn.click();
+    kr.utils.detachEvent(btn, 'click', handler);
+    btn.click();
+});
+
+QUnit.module('Route');
+
 QUnit.test('TestParseRoute', function(assert) {
-    expect(4);
+    expect(7);
 
     var valueChars = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
     var suffix = '\\??.*';
     
-    var goodRoute = new kr.Route('/{view}');
+    var goodRoute = new kr.Route('{view}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.elements.length, 1);
     
@@ -69,25 +145,46 @@ QUnit.test('TestParseRoute', function(assert) {
         var badRoute = new kr.Route('/{view');        
     });
 
-    goodRoute = new kr.Route('/{view}/{id}');
+    goodRoute = new kr.Route('{view}/{id}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.elements.length, 2);
 
-    goodRoute = new kr.Route('/{view}/{id}/{bar}');
+    goodRoute = new kr.Route('{view}/{id}/{bar}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')/(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.elements.length, 3);
+
+    //multi-part route segments are not implemented
+    assert.throws(function () {
+        var r = new kr.Route('{view}/{foo}-{bar}-{baz}/{blah}');
+        //assert.strictEqual(r.regex, '^/?(' + valueChars + ')/(' + valueChars + ')/(' + valueChars + ')' + suffix);
+        //assert.strictEqual(r.elements.length, 3);
+        //assert.strictEqual(r.elements.reduce(function (a, b) {
+        //    return a + b.parts.length;
+        //}, 0), 5);
+    });
+
+    assert.strictEqual(new kr.Route('{view}/{id?}').elements.length, 2);
+
+    //multi-part route segments are not implemented
+    assert.throws(function () {
+        var r = new kr.Route('{view?}/{id}');
+    });    
 });
 
 QUnit.test('TestMatch', function (assert) {
-    expect(16);
+    expect(18);
 
     var rv;
-    var route1 = new kr.Route('/{view}');    
+    var route1 = new kr.Route('{view}');
     assert.ok(rv = route1.match('Foo'), 'Path should match');
     assert.strictEqual(rv.view, 'Foo');
     assert.ok(route1.match('foo/bar') == null);
+    assert.throws(function () {
+        route1.match();
+    });
+    assert.ok(!route1.match(''));
         
-    var route2 = new kr.Route('/{view}/{id}');
+    var route2 = new kr.Route('{view}/{id}');
     assert.ok(rv = route2.match('/Foo/123'), 'Path should match');
     assert.notEqual(rv, null);
     assert.strictEqual(rv.view, 'Foo');
@@ -95,36 +192,45 @@ QUnit.test('TestMatch', function (assert) {
     assert.ok(route2.match('foo') != null);
     assert.ok(route2.match('foo/bar/test') == null);
 
-    var route3 = new kr.Route('/{view}/{id}/{bar}');
+    var route3 = new kr.Route('{view}/{id}/{bar}');
     assert.ok(rv = route3.match('Foo/123/Blah'), 'Path should match');
-    assert.notEqual(rv, null);
     assert.strictEqual(rv.view, 'Foo');
     assert.strictEqual(rv.id, '123');
     assert.strictEqual(rv.bar, 'Blah');
     assert.ok(route3.match('foo') != null);
-    assert.ok(route3.match('foo/bar') != null);    
+    assert.ok(route3.match('foo/bar') != null);
+
+    //multi-part route segments are not implemented
+    assert.throws(function () {
+        var route4 = new kr.Route('{view}/{year}-{month}-{day}/');
+        //assert.ok(rv = route4.match('/detail/2014-06-27/view'));
+        //assert.strictEqual(rv.view, 'detail');
+        //assert.strictEqual(rv.year, '2014');
+        //assert.strictEqual(rv.month, '06');
+        //assert.strictEqual(rv.day, '27');
+        //assert.strictEqual(rv.action, 'view');
+    });
 });
 
 QUnit.test('TestOptionalKeys', function (assert) {
-    expect(5);
+    expect(4);
 
-    var path = '/Foo/?bar=123';
-    var route = new kr.Route('/{view}/{id?}');
-    var rv = route.extractRouteValues(path);
-           
-    assert.strictEqual(route.match(path), true);
-    assert.strictEqual(route.match('/Foo'), true);
-    assert.strictEqual(route.match('/Foo/'), true);
-    assert.strictEqual(rv.view, 'Foo');
-    assert.strictEqual(rv.bar, '123');
-                
+    var path = '/Foo/';
+    var route = new kr.Route('{view}/{id?}');
+    var rv;
+
+    assert.ok(route.match('/Foo'));
+    assert.ok(route.match('/Foo/'));
+
+    assert.ok(rv = route.match(path));
+    assert.strictEqual(rv.view, 'Foo');                
 });
 
 QUnit.test('TestMatchWithDataTypeParsing', function (assert) {
     expect(3);
 
     var path = '/123.456/789.123/2a';
-    var routeValues = new kr.Route('/{foo:int}/{bar:float}/{baz:hex}').extractRouteValues(path);
+    var routeValues = new kr.Route('{foo:int}/{bar:float}/{baz:hex}').match(path);
 
     assert.strictEqual(routeValues.foo, 123);
     assert.strictEqual(routeValues.bar, 789.123);
@@ -132,34 +238,27 @@ QUnit.test('TestMatchWithDataTypeParsing', function (assert) {
 });
 
 QUnit.test('TestResolvePath', function (assert) {
-    expect(1);
+    expect(8);
 
-    var route = new kr.Route('/{foo}/{bar}')
+    assert.strictEqual(new kr.Route('{foo}/{bar}').resolve({ foo: 'blah', bar: 'test' }), 'blah/test');
+    assert.strictEqual(new kr.Route('{foo}/{bar?}').resolve({ foo: 123, bar: 456 }),'123/456');
+    assert.strictEqual(new kr.Route('{foo}/{bar?}').resolve({ foo: 123 }), '123');
 
-    var t = route.resolve({ foo: 'blah', bar: 'test' });
+    assert.ok(new kr.Route('*/{foo}/').resolve({ foo: 123 }) == null);
+    assert.ok(new kr.Route('*/{foo}/').resolve({ foo: 123 }, '') == null);
+    assert.strictEqual(new kr.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer'), 'Beer/123');
+    assert.strictEqual(new kr.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer/Blah/'), 'Beer/123');
+    assert.strictEqual(new kr.Route('*/{foo}/').resolve({ foo: 123 }, '/Beer/Blah/'), 'Beer/123');
 
-    assert.strictEqual(t, '/blah/test');        
-});
-
-QUnit.test('TestResolvePathWithQueryString', function (assert) {
-    expect(2);
-
-    var t1 = new kr.Route('/{foo}/{bar}').resolve({ foo: 'blah', bar: 'test', baz: 123, bean: 'curd' });    
-    assert.strictEqual(t1, '/blah/test?baz=123&bean=curd');
-
-    var t2 = new kr.Route('/{foo}/{bar}').resolve({ foo: 'blah', bar: 'test', bean: 'curd' });
-    assert.strictEqual(t2, '/blah/test?bean=curd');
 });
 
 QUnit.test('TestRouteWithBasePath', function (assert) {
-    expect(3);
+    expect(2);
 
     var path = '/Foo/Bar/Baz/123';
 
-    var route1 = new kr.Route('/*/*/{view}/{id:int}');
-    var rv = route1.extractRouteValues(path);
+    var rv = new kr.Route('/*/*/{view}/{id:int}').match(path);
 
-    assert.strictEqual(route1.match(path), true);
     assert.strictEqual(rv.view, 'Baz');
     assert.strictEqual(rv.id, 123);   
 });
@@ -167,12 +266,10 @@ QUnit.test('TestRouteWithBasePath', function (assert) {
 QUnit.test('TestRouteSpecialCharacters', function (assert) {
     expect(6);
 
-    var path = 'a b c-d*ef+[123]&9{9}9.t$x$t?foo=bar&test=bill';
-    var route = new kr.Route('{foo}-{bar}-{baz}-{blah}-{ext}');
-    assert.strictEqual(route.match(path), true);
-    
-    var rv = route.extractRouteValues(path);
-
+    var path = 'a b c/d*ef/[123]/9{9}9/t$x$t/';
+    var route = new kr.Route('{foo}/{bar}/{baz}/{blah}/{ext}');
+    var rv;
+    assert.ok(rv = route.match(path), true);    
     assert.strictEqual(rv.foo, 'a b c');
     assert.strictEqual(rv.bar, 'd*ef');
     assert.strictEqual(rv.baz, '[123]');
@@ -181,34 +278,27 @@ QUnit.test('TestRouteSpecialCharacters', function (assert) {
 });
 
 QUnit.test('TestRouteWithQueryString', function (assert) {
-    expect(7);
+    expect(3);
 
     var path = '/Foo/123?id=456&foo=bar';
-
+    var rv;
     var route = new kr.Route('/{view}/{id}');    
-    var rv = route.extractRouteValues(path);
-
+    
+    assert.ok(rv = route.match(path));
     assert.strictEqual(rv.view, 'Foo');
     assert.strictEqual(rv.id, '123');
-    assert.strictEqual(rv.foo, 'bar');
-
-    rv = route.extractRouteValues('/Foo/123/?bean=curd&foo=bar');
-    assert.strictEqual(rv.view, 'Foo');
-    assert.strictEqual(rv.id, '123');
-    assert.strictEqual(rv.bean, 'curd');
-    assert.strictEqual(rv.foo, 'bar');
 });
 
 QUnit.test('TestRouteValuesEqual', function (assert) {
     expect(2);
 
-    var rv1 = new kr.Route('/*/*/{view}/{id:int}').extractRouteValues('/Foo/Bar/Baz/123');
-    var rv2 = new kr.Route('/*/*/{view}/{id:int}').extractRouteValues('/Beer/Can/Baz/123');
+    var rv1 = new kr.Route('/*/*/{view}/{id:int}').match('/Foo/Bar/Baz/123');
+    var rv2 = new kr.Route('/*/*/{view}/{id:int}').match('/Beer/Can/Baz/123');
 
     assert.strictEqual(JSON.stringify(rv1), JSON.stringify(rv2));
 
-    var rv1 = new kr.Route('/{view}/{id}').extractRouteValues('/Foo/Bar/Beer/123');
-    var rv2 = new kr.Route('/{view}/{id}').extractRouteValues('/Foo/Bar/Cat/456');
+    var rv1 = new kr.Route('/{view}/{id}').match('/Foo/Bar/Beer/123');
+    var rv2 = new kr.Route('/{view}/{id}').match('/Foo/Bar/Cat/456');
 
     assert.strictEqual(JSON.stringify(rv1), JSON.stringify(rv2));
 });
@@ -255,7 +345,7 @@ QUnit.asyncTest('TestHashPathStringProviderEvents', function (assert) {
         psp.revert();
 
         window.setTimeout(function () {
-            assert.strictEqual(window.location.hash, '');
+            assert.ok(window.location.hash === '#' || window.location.hash==='');
             QUnit.start();
         },20);
     });
@@ -368,7 +458,7 @@ function FakePathProvider() {
     };
 
     function hashChanged() {
-        path = self.getPath();
+        var path = self.getPath();
         self.pathChanged.notifySubscribers(path);
         lastPath = path;
     }
