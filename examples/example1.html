@@ -1,0 +1,47 @@
+﻿<div data-bind="router: router"></div>
+
+<script src="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js"></script>
+<script src="knockroute.js"></script>
+
+
+<script type="text/html" id="homeTemplate">
+    <h1>Home View</h1>
+
+    <h2 data-bind="text: message"></h2>
+
+    <h2>Route Values Passed:</h2>
+    <ul data-bind="foreach: routeValues">
+        <li>
+            <span data-bind="text: name"></span>
+            <span data-bind="text: value"></span>
+        </li>
+    </ul>
+</script>
+
+<script type="text/html" id="listTemplate">
+    <h1>Home View</h1>
+
+    <h2 data-bind="text: message"></h2>
+
+    <h2>Route Values Passed:</h2>
+    <ul data-bind="foreach: routeValues">
+        <li>
+            <span data-bind="text: name"></span>
+            <span data-bind="text: value"></span>
+        </li>
+    </ul>
+</script>
+
+<script type="text/html" id="detailTemplate">
+    <h1>Home View</h1>
+
+    <h2 data-bind="text: message"></h2>
+
+    <h2>Route Values Passed:</h2>
+    <ul data-bind="foreach: routeValues">
+        <li>
+            <span data-bind="text: name"></span>
+            <span data-bind="text: value"></span>
+        </li>
+    </ul>
+</script>
