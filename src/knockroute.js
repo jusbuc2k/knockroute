@@ -240,7 +240,7 @@
         options = this.options = kr.utils.defaults(defaultOptions, options || {});
                
         this.routeTemplate = routeTemplate;
-        this.elements = Route.parseTemplate(routeTemplate, options.pathSeperator);
+        this.segments = Route.parseTemplate(routeTemplate, options.pathSeperator);
     }
        
     Route.prototype.match = function (path, defaultValues) {
@@ -272,7 +272,7 @@
                                         
         for (var i = 0; i < pathSegments.length; i++) {
             pathSegment = pathSegments[i];
-            routeSegment = this.elements.length > i ? this.elements[i] : null;
+            routeSegment = this.segments.length > i ? this.segments[i] : null;
 
             if (routeSegment == null) {
                 // we are out of route segments, so there is nothing left to match, so give up.
@@ -314,9 +314,9 @@
         // We've matched the request path so far, but still have remaining route segments. These need
         // to be all single-part parameter segments with default values or else they won't match
         // because the path has no remaining segments
-        for (var i = pathSegments.length; i < this.elements.length; i++)
+        for (var i = pathSegments.length; i < this.segments.length; i++)
         {
-            routeSegment = this.elements[i];
+            routeSegment = this.segments[i];
             if (routeSegment.parts.length > 1)
             {
                 // If it has more than one part it must contain literals, so it can't match.
@@ -379,8 +379,8 @@
             currentPathSegements = currentPath.split(this.options.pathSeperator);
         }
 
-        for (var i = 0; i < this.elements.length; i++) {
-            routeSegment = this.elements[i];
+        for (var i = 0; i < this.segments.length; i++) {
+            routeSegment = this.segments[i];
             currentSegment = currentPathSegements ? currentPathSegements[i] : null;
 
             if (routeSegment.parts.length === 1) {
@@ -414,7 +414,7 @@
             }
         }
 
-        var requiredCount = this.elements.reduce(function (prev, cur) {
+        var requiredCount = this.segments.reduce(function (prev, cur) {
             if (!cur.parts[0].optional) {
                 return prev + 1;
             } else {
@@ -426,11 +426,11 @@
             return null;
         }
 
-        //for (var i = this.elements.length - 1; i >= 0; i--) {
-        //    for (var y = 0; y < this.elements[i].parts.length; y++) {
-        //        if (routeValues.hasOwnProperty(this.elements[i].parts[y].name)) {
-        //            path = path.replace('{' + this.elements[i].parts[y].name + '}', routeValues[this.elements[i].parts[y].name]);
-        //            used.push(this.elements[i].parts[y].name);
+        //for (var i = this.segments.length - 1; i >= 0; i--) {
+        //    for (var y = 0; y < this.segments[i].parts.length; y++) {
+        //        if (routeValues.hasOwnProperty(this.segments[i].parts[y].name)) {
+        //            path = path.replace('{' + this.segments[i].parts[y].name + '}', routeValues[this.segments[i].parts[y].name]);
+        //            used.push(this.segments[i].parts[y].name);
         //        }
         //    }
         //}
@@ -439,9 +439,9 @@
     };
 
     Route.prototype.hasKey = function (key) {
-        for (var x = 0; x < this.elements.length; x++) {
-            for (var y = 0; y < this.elements[x].parts.length; y++) {
-                if (this.elements[x].parts[y].name === key) {
+        for (var x = 0; x < this.segments.length; x++) {
+            for (var y = 0; y < this.segments[x].parts.length; y++) {
+                if (this.segments[x].parts[y].name === key) {
                     return true;
                 }
             }
@@ -574,9 +574,59 @@
         } else {
             throw 'constructor must be a valid constructor function.';
         }
-    };  
+    };
+
+    function DefaultTemplateProvider() {
+        var self = this;
+    }
+
+    DefaultTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
+        ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block.</summary>
+        ///<param name="templateID" type="String">The id of the &lt;script&gt; element containing the template contents or reference</param>
+        ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
+        var template = window.document.getElementById(templateID);
+
+        if (!template) {
+            throw 'There is no element with id ' + templateID + '.';
+        }
+
+        if (template.tagName.toLowerCase() !== 'script') {
+            throw 'The element with id ' + templateID + ' must be a <script> tag in order to use it as a template.';
+        }
+
+        var response = {
+            success: true,
+            statusCode: 203,
+            template: template
+        };
+
+        completeCallback(response);      
+    };
+
+    DefaultTemplateProvider.prototype.unloadTemplate = function (template) {
+        /// <signature>
+        /// <summary>Unloads a template with the given ID.</summary>
+        /// <param name="template" type="String"></param>
+        /// </signature>
+        /// <signature>
+        /// <summary>Unloads a template specified by the given HTML element.</summary>
+        /// <param name="template" type="HTMLScriptElement">A string.</param>       
+        /// </signature>
+
+        //TODO: Should this do something? Should the DefaultTemplateProvider exist, or should it be none?
+    };
+
+    DefaultTemplateProvider.prototype.getOrCreateTemplate = function (templateID, dataSrc, container) {
+        var template = window.document.getElementById(templateID);
+
+        if (template) {
+            return template;
+        }
+
+        throw 'The default template provider cannot create templates.';
+    };
     
-    function jQueryTemplateProvider() {
+    function AjaxTemplateProvider() {
         var self = this;
 
         //TODO: support a default base path for templates.
@@ -588,7 +638,7 @@
         }
     }
 
-    jQueryTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
+    AjaxTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source.</summary>
         ///<param name="templateID" type="String">The id of the &lt;script&gt; element containing the template contents or reference</param>
         ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
@@ -633,7 +683,7 @@
         }
     };
 
-    jQueryTemplateProvider.prototype.unloadTemplate = function (template) {
+    AjaxTemplateProvider.prototype.unloadTemplate = function (template) {
         /// <signature>
         /// <summary>Unloads a template with the given ID.</summary>
         /// <param name="template" type="String"></param>
@@ -654,7 +704,7 @@
         template.text = '';
     };
 
-    jQueryTemplateProvider.prototype.getOrCreateTemplate = function (templateID, dataSrc, container) {
+    AjaxTemplateProvider.prototype.getOrCreateTemplate = function (templateID, dataSrc, container) {
         var template = window.document.getElementById(templateID);
 
         container = container || window.document.body;
@@ -675,8 +725,9 @@
 
     kr.HashPathStringProvider = HashPathStringProvider;
     kr.HistoryPathStringProvider = HistoryPathStringProvider;
+    kr.DefaultTemplateProvider = DefaultTemplateProvider;
     if (typeof jQuery !== 'undefined') {
-        kr.jQueryTemplateProvider = jQueryTemplateProvider;
+        kr.AjaxTemplateProvider = AjaxTemplateProvider;
     }
 
     //#endregion
@@ -747,9 +798,9 @@
     }
 
     View.prototype.executeAction = function(action, routeValues, callback) {
-        var self = this;
+        var self = this;        
         if (typeof this.modelInstance === 'object' && typeof this.modelInstance[action] === 'function') {
-            kr.utils.nowOrThen(this.modelInstance[action](routeValues), function(){
+            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues), function(){
                 callback();
             }, function() {
                 throw 'Action ' + action + ' failed to execute.';
@@ -820,7 +871,7 @@
             areas: [],
             views: [],
             pathProvider: 'hash',
-            templateProvider: 'jQuery',
+            templateProvider: 'default',
             createTemplates: false,
             templateContainer: null
         };
@@ -832,8 +883,8 @@
         var areas = [];
         var views = [];
         var pathChangedEvent;
-
-
+        var redirectSetTemplate = null;
+        
         //#region Privates
 
         var currentView = ko.observable(defaultView);
@@ -844,7 +895,7 @@
             var model = view.modelInstance || view.model || {};
             //var channel = channels[view.channel];
 
-            function apply() {
+            function apply(templateID) {
                 hit++;
                 if (hit >= needHit) {
                     currentView(view);
@@ -875,7 +926,16 @@
                 apply();
             }
 
+            //TODO: is this really the best way to do this? Would it be better
+            // to pass a parameter to the load method that has a way to do this?
+            // something like actionContext.setTemplate() or some crap as a parameter?
+
+            redirectSetTemplate = function (templateID) {
+                view.activeTemplateID = templateID;
+            };
+
             view.executeAction('load', routeValues, function (result) {
+                redirectSetTemplate = null;
                 if (result == null || result === true) {
                     apply();
                 } else {
@@ -994,7 +1054,7 @@
                 
         self.pathProvider = new kr.HashPathStringProvider();
                                         
-        self.templateProvider = new kr.jQueryTemplateProvider();
+        self.templateProvider = new kr.DefaultTemplateProvider();
 
         self.modelFactory = new DefaultModelFactory();
 
@@ -1053,10 +1113,8 @@
         self.resolve = function (routeValues) {
             var currentPath = self.pathProvider.getPath();
             var path = '';
-            //var route = getRoute(path);
             var nvc = {};
-            var hasQuery = false;
-            
+            var hasQuery = false;            
             var tmp;
             var route;
             var defaults;
@@ -1098,10 +1156,40 @@
             return path;
         }
 
+        self.navigate = function (routeValues) {
+            /// <signature>
+            /// <summary>Navigates to a path represented by the given route values.</summary>
+            /// <param name="routeValues" type="Object">A collection of route values.</param>
+            /// </signature>
+            /// <signature>
+            /// <summary>Navigates to the given path.</summary>
+            /// <param name="path" type="String">A path string to navigate to.</param>       
+            /// </signature>            
+            var path;
+
+            if (typeof routeValues === 'string') {
+                path = routeValues;
+            } else {
+                path = self.resolve(routeValues)
+            }
+
+            if (path != null) {
+                self.pathProvider.setPath(path);
+            } else {
+                //TODO: Handle this along with the virtual-404 type stuff
+                //needed in onPathChanged
+                throw 'No matching route or path exists.';
+            }
+        }
+        
         self.setTemplate = function (templateID) {
-            currentView().activeTemplateID = templateID;
-            currentView.valueWillMutate();
-            currentView.valueHasMutated();
+            if (typeof redirectSetTemplate === 'function') {
+                redirectSetTemplate(templateID);
+            } else {
+                currentView().activeTemplateID = templateID;
+                currentView.valueWillMutate();
+                currentView.valueHasMutated();
+            }
         };
 
         //#endregion
@@ -1130,6 +1218,8 @@
             // (Or other template storage/fetching mechanisms I guess)
             if (typeof options.templateProvider === 'object') {
                 self.templateProvider = options.templateProvider;
+            } else if (options.templateProvider === 'ajax') {
+                self.templateProvider = new kr.AjaxTemplateProvider();
             }
 
             // add all the routes from the constructor
@@ -1222,6 +1312,8 @@
             self.pathProvider.start();
         }
 
+        //TODO: Should we call this, or should we expose a public init() and let the binding call it?
+        // I'm favoring the later.
         init();
                
         //#endregion
@@ -1230,6 +1322,7 @@
     kr.ViewRouter = ViewRouter;
 
     //#endregion
+
     ko.bindingHandlers['router'] = {
         'init': function (element, valueAccessor, allBindings, viewModel, bindingContext) {
             var result = ko.bindingHandlers.template.init(element, function () {
@@ -1242,7 +1335,7 @@
             var bindingValue = function () {
                 return {
                     data: view.modelInstance,
-                    name: view.templateID
+                    name: view.activeTemplateID
                 };
             };
 

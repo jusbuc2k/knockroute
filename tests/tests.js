@@ -139,7 +139,7 @@ QUnit.test('TestParseRoute', function(assert) {
     
     var goodRoute = new kr.Route('{view}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')' + suffix);
-    assert.strictEqual(goodRoute.elements.length, 1);
+    assert.strictEqual(goodRoute.segments.length, 1);
     
     assert.throws(function () {
         var badRoute = new kr.Route('/{view');        
@@ -147,11 +147,11 @@ QUnit.test('TestParseRoute', function(assert) {
 
     goodRoute = new kr.Route('{view}/{id}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')' + suffix);
-    assert.strictEqual(goodRoute.elements.length, 2);
+    assert.strictEqual(goodRoute.segments.length, 2);
 
     goodRoute = new kr.Route('{view}/{id}/{bar}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')/(' + valueChars + ')' + suffix);
-    assert.strictEqual(goodRoute.elements.length, 3);
+    assert.strictEqual(goodRoute.segments.length, 3);
 
     //multi-part route segments are not implemented
     assert.throws(function () {
@@ -163,7 +163,7 @@ QUnit.test('TestParseRoute', function(assert) {
         //}, 0), 5);
     });
 
-    assert.strictEqual(new kr.Route('{view}/{id?}').elements.length, 2);
+    assert.strictEqual(new kr.Route('{view}/{id?}').segments.length, 2);
 
     //multi-part route segments are not implemented
     assert.throws(function () {
@@ -393,10 +393,10 @@ QUnit.asyncTest('TestHistoryPathStringProvider', function (assert) {
     }, 20);
 });
 
-QUnit.asyncTest('TestjQueryTemplateProvider', function (assert) {
+QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
     expect(12);
 
-    var dtp = new kr.jQueryTemplateProvider();
+    var dtp = new kr.AjaxTemplateProvider();
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>')");
     $('#qunit-fixture').append("<script type='text/html' id='template2' data-src='template.html'></script>')");
@@ -449,6 +449,7 @@ function FakePathProvider() {
 
     self.setPath = function (path) {
         _path = path;
+        hashChanged();
     };
 
     self.getPath = function () {
@@ -562,7 +563,8 @@ QUnit.test('TestResolve', function (assert) {
         views: [
             { name: 'default', model: TestModel, templateID: 'template1' },
             { name: 'other', model: TestModel, templateID: 'template1' },
-            { name: 'foo', area: 'bean', model: TestModel, templateID: 'template1' }
+            { name: 'foo', area: 'bean', model: TestModel, templateID: 'template1' },
+        { name: 'default', area: 'bean', model: TestModel, templateID: 'template1' }
         ],
         areas: [
             { name: 'bean' },
@@ -680,19 +682,19 @@ QUnit.test('TestListDetailScenario', function (assert) {
     
     assert.strictEqual(router.view().modelInstance.list().length, 0);
 
-    router.pathProvider.fakeChange('/home/search');
+    router.navigate({ view: 'home', action: 'search' });
     var listLoaded = router.view().modelInstance.dateLoaded();
     assert.ok(listLoaded);
     assert.strictEqual(router.view().modelInstance.list().length, 10);
     
-    router.pathProvider.fakeChange('/detail/view/1');
+    router.navigate({ view: 'detail', action: 'view', id: 1 });
     assert.strictEqual(router.view().modelInstance.item(), '1');
 
-    router.pathProvider.fakeChange('/home/search');
+    router.navigate({ view: 'home', action: 'search' });
     assert.strictEqual(router.view().modelInstance.dateLoaded(), listLoaded);
     assert.strictEqual(router.view().modelInstance.list().length, 10);
 
-    router.pathProvider.fakeChange('/home/');
+    router.navigate({ view: 'home' });
     assert.strictEqual(router.view().modelInstance.list().length, 0);    
 });
 

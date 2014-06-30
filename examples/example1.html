@@ -1,47 +1,181 @@
-﻿<div data-bind="router: router"></div>
+﻿<html>
+<head>
+    <title>KnockRoute Example 1</title>
+</head>
+<body>
+    <div data-bind="router: router"></div>
+    <script src="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js"></script>
+    <script src="../src/knockroute.js"></script>
+    <script src="data.js"></script>
 
-<script src="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js"></script>
-<script src="knockroute.js"></script>
+    <script type="text/html" id="listTemplate">
+        <h1>KnockRoute Example 1</h1>
+        <h2>List of Persons</h2>
+        <ul data-bind="foreach: list">
+            <li>
+                <span data-bind="text: firstName"></span>
+                <span data-bind="text: lastName"></span>
+                <a href="#" data-bind="attr: {href: '#/detail/view/'+personID}">View</a>
+            </li>
+        </ul>
+    </script>
 
+    <script type="text/html" id="detailTemplate">
+        <h1>KnockRoute Example 1</h1>        
 
-<script type="text/html" id="homeTemplate">
-    <h1>Home View</h1>
+        <h2>Peson Detail</h2>
 
-    <h2 data-bind="text: message"></h2>
+        <ul>
+            <li>
+                <label>First Name:</label>
+                <span data-bind="text: firstName"></span>
+            </li>
+            <li>
+                <label>Last Name:</label>
+                <span data-bind="text: lastName"></span>
+            </li>
+            <li>
+                <label>Company Name:</label>
+                <span data-bind="text: company"></span>
+            </li>
+            <li>
+                <label>Email:</label>
+                <span data-bind="text: email"></span>
+            </li>
+            <li>
+                <label>Phone:</label>
+                <span data-bind="text: phone"></span>
+            </li>
+        </ul>
 
-    <h2>Route Values Passed:</h2>
-    <ul data-bind="foreach: routeValues">
-        <li>
-            <span data-bind="text: name"></span>
-            <span data-bind="text: value"></span>
-        </li>
-    </ul>
-</script>
+        <p>
+            <a href="#" data-bind="attr: { href: '#/detail/edit/' + personID()}">Edit</a>
+            <a href="#/home/">Back to List</a>
+        </p>
+    </script>
 
-<script type="text/html" id="listTemplate">
-    <h1>Home View</h1>
+    <script type="text/html" id="editTemplate">
+        <h1>KnockRoute Example 1</h1>
 
-    <h2 data-bind="text: message"></h2>
+        <h2>Edit Person Detail</h2>
 
-    <h2>Route Values Passed:</h2>
-    <ul data-bind="foreach: routeValues">
-        <li>
-            <span data-bind="text: name"></span>
-            <span data-bind="text: value"></span>
-        </li>
-    </ul>
-</script>
+        <ul>
+            <li>
+                <label>First Name:</label>
+                <input type="text" data-bind="value: firstName" style="width: 200px"/>
+            </li>
+            <li>
+                <label>Last Name:</label>
+                <input type="text" data-bind="value: lastName" style="width: 200px" />
+            </li>
+            <li>
+                <label>Company Name:</label>
+                <input type="text" data-bind="value: company" style="width: 200px" />
+            </li>
+            <li>
+                <label>Email:</label>
+                <input type="text" data-bind="value: email" style="width: 200px" />
+            </li>
+            <li>
+                <label>Phone:</label>
+                <input type="text" data-bind="value: phone" style="width: 200px" />
+            </li>
+        </ul>
 
-<script type="text/html" id="detailTemplate">
-    <h1>Home View</h1>
+        <p>
+            <a href="#" data-bind="click: save">Save</a>
+            <a href="#" data-bind="attr: { href: '#/detail/detail/' + personID()}">Cancel</a>
+        </p>
+    </script>
 
-    <h2 data-bind="text: message"></h2>
+    <script>
+        
+        //TODO: make this service an example of an ajax call using a promise
+        var exampleDataService = {
+            getPersonByID: function (id) {
+                // pretend to be a async jQuery deferred with a .done() callback
+                return ko.utils.arrayFirst(EXAMPLE_DATA, function (item) {
+                    return item.personID === id;
+                });
+            },
+            savePerson: function (id, person) {
+                var existing = ko.utils.arrayFirst(EXAMPLE_DATA, function (item) {
+                    return item.personID === id;
+                });
 
-    <h2>Route Values Passed:</h2>
-    <ul data-bind="foreach: routeValues">
-        <li>
-            <span data-bind="text: name"></span>
-            <span data-bind="text: value"></span>
-        </li>
-    </ul>
-</script>
+                ko.utils.extend(existing, person);
+            }
+        }
+
+        function HostModel() {
+            this.router = new kr.ViewRouter({
+                views: [
+                    { name: 'home', model: ListModel, templateID: 'listTemplate' },
+                    { name: 'detail', model: DetailModel, templateID: 'detailTemplate' }
+                ],
+                defaultRoutes: [
+                   {
+                       template: '{view}/{action?}/{id:int?}',
+                       defaults: { view: 'home', action: 'index' },
+                   }
+                ],
+            });
+        }
+
+        function ListModel() {
+            var self = this;
+            this.list = ko.observableArray(EXAMPLE_DATA);
+
+            this.load = function () {
+                return true;
+            };
+        }
+
+        function DetailModel(router) {
+            var self = this;
+            this.personID = ko.observable();
+            this.firstName = ko.observable();
+            this.lastName = ko.observable();
+            this.company = ko.observable();
+            this.email = ko.observable();
+            this.phone = ko.observable();
+            
+            self.save = function () {                                
+                exampleDataService.savePerson(self.personID(), ko.toJS(self));
+
+                router.navigate({ view: 'detail' });
+            };
+
+            self.load = function (routeValues) {
+                if (routeValues.action === 'edit') {
+                    router.setTemplate('editTemplate');
+                } else {
+                    router.setTemplate('detailTemplate');
+                }
+
+                var person = exampleDataService.getPersonByID(routeValues.id);
+                if (person == null) {
+                    return false;
+                }
+                self.personID(person.personID);
+                self.lastName(person.lastName);
+                self.firstName(person.firstName);
+                self.company(person.company);
+                self.email(person.email);
+                self.phone(person.phone);
+
+                // If the load method is defined, it must return true or a promise
+                // If returning a promise, the view will only be loaded if the promise
+                // calls the success callback
+                return true;
+            };
+        }
+
+        ; (function () {
+            var host = new HostModel();
+            ko.applyBindings(host);
+        })();
+    </script>
+</body>
+
+</html>
