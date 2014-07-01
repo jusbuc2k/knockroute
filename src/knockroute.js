@@ -3,13 +3,12 @@
 
 ; (function (global, ko) {
     
-    var _kr = global.kr;
-    var kr = global.kr = global.kr || {};
+    var kr = {};
 
-    kr.noConflict = function () {
-        global.kr = _kr;
-        return kr;
-    };
+    function extendKo() {
+        ko.route = kr;
+        ko.bindingHandlers['routeTemplate'] = routerBinding;
+    }
 
     //#region Utils
 
@@ -860,7 +859,7 @@
         var self = this;
                 
         var defaultOptions = {
-            defaultRoutes: [
+            routes: [
                 {
                     template: '{view}/{action?}/{id?}',
                     defaults: { view: 'home', action: 'index' },
@@ -1223,10 +1222,10 @@
             }
 
             // add all the routes from the constructor
-            for (i = 0; i < options.defaultRoutes.length; i++) {
+            for (i = 0; i < options.routes.length; i++) {
                 routes.push({
-                    route: new kr.Route(options.defaultRoutes[i].template),
-                    defaults: options.defaultRoutes[i].defaults
+                    route: new kr.Route(options.routes[i].template),
+                    defaults: options.routes[i].defaults
                 });
             };
     
@@ -1323,7 +1322,8 @@
 
     //#endregion
 
-    ko.bindingHandlers['router'] = {
+    //#region ko Binding
+    var routerBinding = {
         'init': function (element, valueAccessor, allBindings, viewModel, bindingContext) {
             var result = ko.bindingHandlers.template.init(element, function () {
                 return '';
@@ -1357,5 +1357,8 @@
           
         }
     };
+    //#endregion
+
+    extendKo();
 
 })(window, ko);

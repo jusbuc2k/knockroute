@@ -108,7 +108,7 @@
         }
 
         function HostModel() {
-            this.router = new kr.ViewRouter({
+            this.router = new ko.route.ViewRouter({
                 views: [
                     { name: 'home', model: ListModel, templateID: 'listTemplate' },
                     { name: 'detail', model: DetailModel, templateID: 'detailTemplate' }

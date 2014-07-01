@@ -9,19 +9,6 @@ QUnit.done(function () {
     window.history.pushState({}, '', orig);
 });
 
-QUnit.test('TestNoConflict', function (assert) {
-    expect(3);
-
-    assert.ok(kr != null, 'kr should be defined');
-
-    var tmp = kr.noConflict();
-
-    assert.ok(kr == null, 'kr should NOT be defined');
-    assert.ok(typeof tmp === 'object' && tmp.Route, 'tmp should be kr');
-
-    window.kr = tmp;
-});
-
 QUnit.module('Utils');
 
 QUnit.test('defaults', function (assert) {
@@ -37,7 +24,7 @@ QUnit.test('defaults', function (assert) {
          c: 8
      };
 
-     var opts = kr.utils.defaults(defaults, options);
+     var opts = ko.route.utils.defaults(defaults, options);
      assert.strictEqual(opts, options, 'objects should be ref equivalent');
      assert.strictEqual(options.a, 9);
      assert.strictEqual(options.b, 1);
@@ -49,22 +36,22 @@ QUnit.test('queryString', function (assert) {
 
     var qs;
 
-    assert.ok(qs = kr.utils.parseQueryString('foo=bar'));
+    assert.ok(qs = ko.route.utils.parseQueryString('foo=bar'));
     assert.strictEqual(qs.foo, 'bar');
-    assert.strictEqual(kr.utils.serializeQueryString(qs), 'foo=bar');
+    assert.strictEqual(ko.route.utils.serializeQueryString(qs), 'foo=bar');
 
-    assert.ok(qs = kr.utils.parseQueryString('?bar=foo'));
+    assert.ok(qs = ko.route.utils.parseQueryString('?bar=foo'));
     assert.strictEqual(qs.bar, 'foo');
-    assert.strictEqual(kr.utils.serializeQueryString(qs), 'bar=foo');
+    assert.strictEqual(ko.route.utils.serializeQueryString(qs), 'bar=foo');
     
-    assert.ok(qs = kr.utils.parseQueryString('/blah/blah?foo=bar'));
+    assert.ok(qs = ko.route.utils.parseQueryString('/blah/blah?foo=bar'));
     assert.strictEqual(qs.foo, 'bar');
-    assert.strictEqual(kr.utils.serializeQueryString(qs), 'foo=bar');
+    assert.strictEqual(ko.route.utils.serializeQueryString(qs), 'foo=bar');
 
-    assert.ok(qs = kr.utils.parseQueryString('?foo=bar&beer=nuts'));
+    assert.ok(qs = ko.route.utils.parseQueryString('?foo=bar&beer=nuts'));
     assert.strictEqual(qs.foo, 'bar');
     assert.strictEqual(qs.beer, 'nuts');
-    assert.strictEqual(kr.utils.serializeQueryString(qs), 'foo=bar&beer=nuts');
+    assert.strictEqual(ko.route.utils.serializeQueryString(qs), 'foo=bar&beer=nuts');
 });
 
 QUnit.test('nowOrThen', function (assert) {
@@ -98,17 +85,17 @@ QUnit.test('nowOrThen', function (assert) {
         }
     };
 
-    kr.utils.nowOrThen(true, success, fail);
+    ko.route.utils.nowOrThen(true, success, fail);
     assert.strictEqual(sHit, 1);
-    kr.utils.nowOrThen(false, success, fail);
+    ko.route.utils.nowOrThen(false, success, fail);
     assert.strictEqual(fHit, 1);
 
-    kr.utils.nowOrThen(promise, success, fail);
+    ko.route.utils.nowOrThen(promise, success, fail);
     assert.strictEqual(sHit, 1);
-    kr.utils.nowOrThen(jqd, success, fail);
+    ko.route.utils.nowOrThen(jqd, success, fail);
     assert.strictEqual(fHit, 1);
 
-    kr.utils.nowOrThen(null, success, fail);
+    ko.route.utils.nowOrThen(null, success, fail);
     assert.strictEqual(fHit, 2);
    
 });
@@ -123,9 +110,9 @@ QUnit.test('events', function (assert) {
         assert.ok(e);
     };
     
-    kr.utils.attachEvent(btn, 'click', handler);
+    ko.route.utils.attachEvent(btn, 'click', handler);
     btn.click();
-    kr.utils.detachEvent(btn, 'click', handler);
+    ko.route.utils.detachEvent(btn, 'click', handler);
     btn.click();
 });
 
@@ -137,25 +124,25 @@ QUnit.test('TestParseRoute', function(assert) {
     var valueChars = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
     var suffix = '\\??.*';
     
-    var goodRoute = new kr.Route('{view}');
+    var goodRoute = new ko.route.Route('{view}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.segments.length, 1);
     
     assert.throws(function () {
-        var badRoute = new kr.Route('/{view');        
+        var badRoute = new ko.route.Route('/{view');        
     });
 
-    goodRoute = new kr.Route('{view}/{id}');
+    goodRoute = new ko.route.Route('{view}/{id}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.segments.length, 2);
 
-    goodRoute = new kr.Route('{view}/{id}/{bar}');
+    goodRoute = new ko.route.Route('{view}/{id}/{bar}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')/(' + valueChars + ')/(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.segments.length, 3);
 
     //multi-part route segments are not implemented
     assert.throws(function () {
-        var r = new kr.Route('{view}/{foo}-{bar}-{baz}/{blah}');
+        var r = new ko.route.Route('{view}/{foo}-{bar}-{baz}/{blah}');
         //assert.strictEqual(r.regex, '^/?(' + valueChars + ')/(' + valueChars + ')/(' + valueChars + ')' + suffix);
         //assert.strictEqual(r.elements.length, 3);
         //assert.strictEqual(r.elements.reduce(function (a, b) {
@@ -163,11 +150,11 @@ QUnit.test('TestParseRoute', function(assert) {
         //}, 0), 5);
     });
 
-    assert.strictEqual(new kr.Route('{view}/{id?}').segments.length, 2);
+    assert.strictEqual(new ko.route.Route('{view}/{id?}').segments.length, 2);
 
     //multi-part route segments are not implemented
     assert.throws(function () {
-        var r = new kr.Route('{view?}/{id}');
+        var r = new ko.route.Route('{view?}/{id}');
     });    
 });
 
@@ -175,7 +162,7 @@ QUnit.test('TestMatch', function (assert) {
     expect(21);
 
     var rv;
-    var route1 = new kr.Route('{view}');
+    var route1 = new ko.route.Route('{view}');
     assert.ok(rv = route1.match('Foo'), 'Path should match');
     assert.strictEqual(rv.view, 'Foo');
     assert.ok(route1.match('foo/bar') == null);
@@ -184,7 +171,7 @@ QUnit.test('TestMatch', function (assert) {
     });
     assert.ok(!route1.match(''));
         
-    var route2 = new kr.Route('{view}/{id?}');
+    var route2 = new ko.route.Route('{view}/{id?}');
     assert.ok(rv = route2.match('/Foo/123'), 'Path should match');    
     assert.notEqual(rv, null);
     assert.strictEqual(rv.view, 'Foo');
@@ -192,7 +179,7 @@ QUnit.test('TestMatch', function (assert) {
     assert.ok(route2.match('foo') != null);
     assert.ok(route2.match('foo/bar/test') == null);
 
-    var route3 = new kr.Route('{view}/{id?}/{bar?}');
+    var route3 = new ko.route.Route('{view}/{id?}/{bar?}');
     assert.ok(rv = route3.match('Foo/123/Blah'), 'Path should match');
     assert.strictEqual(rv.view, 'Foo');
     assert.strictEqual(rv.id, '123');
@@ -202,7 +189,7 @@ QUnit.test('TestMatch', function (assert) {
 
     //multi-part route segments are not implemented
     assert.throws(function () {
-        var route4 = new kr.Route('{view}/{year}-{month}-{day}/');
+        var route4 = new ko.route.Route('{view}/{year}-{month}-{day}/');
         //assert.ok(rv = route4.match('/detail/2014-06-27/view'));
         //assert.strictEqual(rv.view, 'detail');
         //assert.strictEqual(rv.year, '2014');
@@ -212,7 +199,7 @@ QUnit.test('TestMatch', function (assert) {
     });
         
     
-    assert.ok(rv = new kr.Route('{channel}/{view}/{id?}').match('', { channel: 'default', view: 'index' }));
+    assert.ok(rv = new ko.route.Route('{channel}/{view}/{id?}').match('', { channel: 'default', view: 'index' }));
     assert.strictEqual(rv.channel, 'default');
     assert.strictEqual(rv.view, 'index');
     
@@ -222,15 +209,15 @@ QUnit.test('TestMatchWithDataTypeParsing', function (assert) {
     expect(9);
     var rv;
 
-    assert.ok(new kr.Route('{bar:int}').match('123d') == null, 'Path should not match');
-    assert.ok(new kr.Route('{bar:float}').match('123d') == null, 'Path should not match');
-    assert.ok(new kr.Route('{bar:hex}').match('abg') == null, 'Path should not match');
+    assert.ok(new ko.route.Route('{bar:int}').match('123d') == null, 'Path should not match');
+    assert.ok(new ko.route.Route('{bar:float}').match('123d') == null, 'Path should not match');
+    assert.ok(new ko.route.Route('{bar:hex}').match('abg') == null, 'Path should not match');
 
-    assert.ok(rv = new kr.Route('{bar:int}').match('123'), 'Path should match');
+    assert.ok(rv = new ko.route.Route('{bar:int}').match('123'), 'Path should match');
     assert.strictEqual(rv.bar, 123);
-    assert.ok(rv = new kr.Route('{bar:float}').match('123.456'), 'Path should match');
+    assert.ok(rv = new ko.route.Route('{bar:float}').match('123.456'), 'Path should match');
     assert.strictEqual(rv.bar, 123.456);
-    assert.ok(rv = new kr.Route('{bar:hex}').match('0f9ab1'), 'Path should match');
+    assert.ok(rv = new ko.route.Route('{bar:hex}').match('0f9ab1'), 'Path should match');
     assert.strictEqual(rv.bar, parseInt('0f9ab1', 16));    
 });
 
@@ -238,7 +225,7 @@ QUnit.test('TestOptionalKeys', function (assert) {
     expect(4);
 
     var path = '/Foo/';
-    var route = new kr.Route('{view}/{id?}');
+    var route = new ko.route.Route('{view}/{id?}');
     var rv;
 
     assert.ok(route.match('/Foo'));
@@ -251,15 +238,15 @@ QUnit.test('TestOptionalKeys', function (assert) {
 QUnit.test('TestResolvePath', function (assert) {
     expect(8);
 
-    assert.strictEqual(new kr.Route('{foo}/{bar}').resolve({ foo: 'blah', bar: 'test' }), 'blah/test');
-    assert.strictEqual(new kr.Route('{foo}/{bar?}').resolve({ foo: 123, bar: 456 }),'123/456');
-    assert.strictEqual(new kr.Route('{foo}/{bar?}').resolve({ foo: 123 }), '123');
+    assert.strictEqual(new ko.route.Route('{foo}/{bar}').resolve({ foo: 'blah', bar: 'test' }), 'blah/test');
+    assert.strictEqual(new ko.route.Route('{foo}/{bar?}').resolve({ foo: 123, bar: 456 }),'123/456');
+    assert.strictEqual(new ko.route.Route('{foo}/{bar?}').resolve({ foo: 123 }), '123');
 
-    assert.ok(new kr.Route('*/{foo}/').resolve({ foo: 123 }) == null);
-    assert.ok(new kr.Route('*/{foo}/').resolve({ foo: 123 }, '') == null);
-    assert.strictEqual(new kr.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer'), 'Beer/123');
-    assert.strictEqual(new kr.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer/Blah/'), 'Beer/123');
-    assert.strictEqual(new kr.Route('*/{foo}/').resolve({ foo: 123 }, '/Beer/Blah/'), 'Beer/123');
+    assert.ok(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }) == null);
+    assert.ok(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, '') == null);
+    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer'), 'Beer/123');
+    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer/Blah/'), 'Beer/123');
+    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, '/Beer/Blah/'), 'Beer/123');
 
 });
 
@@ -268,7 +255,7 @@ QUnit.test('TestRouteWithBasePath', function (assert) {
 
     var path = '/Foo/Bar/Baz/123';
 
-    var rv = new kr.Route('/*/*/{view}/{id:int}').match(path);
+    var rv = new ko.route.Route('/*/*/{view}/{id:int}').match(path);
 
     assert.strictEqual(rv.view, 'Baz');
     assert.strictEqual(rv.id, 123);   
@@ -278,7 +265,7 @@ QUnit.test('TestRouteSpecialCharacters', function (assert) {
     expect(6);
 
     var path = 'a b c/d*ef/[123]/9{9}9/t$x$t/';
-    var route = new kr.Route('{foo}/{bar}/{baz}/{blah}/{ext}');
+    var route = new ko.route.Route('{foo}/{bar}/{baz}/{blah}/{ext}');
     var rv;
     assert.ok(rv = route.match(path), true);    
     assert.strictEqual(rv.foo, 'a b c');
@@ -293,7 +280,7 @@ QUnit.test('TestRouteWithQueryString', function (assert) {
 
     var path = '/Foo/123?id=456&foo=bar';
     var rv;
-    var route = new kr.Route('/{view}/{id}');    
+    var route = new ko.route.Route('/{view}/{id}');    
     
     assert.ok(rv = route.match(path));
     assert.strictEqual(rv.view, 'Foo');
@@ -303,13 +290,13 @@ QUnit.test('TestRouteWithQueryString', function (assert) {
 QUnit.test('TestRouteValuesEqual', function (assert) {
     expect(2);
 
-    var rv1 = new kr.Route('/*/*/{view}/{id:int}').match('/Foo/Bar/Baz/123');
-    var rv2 = new kr.Route('/*/*/{view}/{id:int}').match('/Beer/Can/Baz/123');
+    var rv1 = new ko.route.Route('/*/*/{view}/{id:int}').match('/Foo/Bar/Baz/123');
+    var rv2 = new ko.route.Route('/*/*/{view}/{id:int}').match('/Beer/Can/Baz/123');
 
     assert.strictEqual(JSON.stringify(rv1), JSON.stringify(rv2));
 
-    var rv1 = new kr.Route('/{view}/{id}').match('/Foo/Bar/Beer/123');
-    var rv2 = new kr.Route('/{view}/{id}').match('/Foo/Bar/Cat/456');
+    var rv1 = new ko.route.Route('/{view}/{id}').match('/Foo/Bar/Beer/123');
+    var rv2 = new ko.route.Route('/{view}/{id}').match('/Foo/Bar/Cat/456');
 
     assert.strictEqual(JSON.stringify(rv1), JSON.stringify(rv2));
 });
@@ -317,7 +304,7 @@ QUnit.test('TestRouteValuesEqual', function (assert) {
 QUnit.module('Providers');
 
 QUnit.asyncTest('TestHashPathStringProvider', function (assert) {
-    var psp = new kr.HashPathStringProvider();
+    var psp = new ko.route.HashPathStringProvider();
     expect(5);
 
     window.location.hash = '#';
@@ -343,7 +330,7 @@ QUnit.asyncTest('TestHashPathStringProvider', function (assert) {
 });
 
 QUnit.asyncTest('TestHashPathStringProviderEvents', function (assert) {
-    var psp = new kr.HashPathStringProvider();
+    var psp = new ko.route.HashPathStringProvider();
     expect(2);
 
     window.location.hash = '#';
@@ -367,7 +354,7 @@ QUnit.asyncTest('TestHashPathStringProviderEvents', function (assert) {
 QUnit.asyncTest('TestHistoryPathStringProvider', function (assert) {
     expect(2);
 
-    var psp = new kr.HistoryPathStringProvider({
+    var psp = new ko.route.HistoryPathStringProvider({
         basePath: '^/\w+/index.html'
     });
 
@@ -396,7 +383,7 @@ QUnit.asyncTest('TestHistoryPathStringProvider', function (assert) {
 QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
     expect(12);
 
-    var dtp = new kr.AjaxTemplateProvider();
+    var dtp = new ko.route.AjaxTemplateProvider();
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>')");
     $('#qunit-fixture').append("<script type='text/html' id='template2' data-src='template.html'></script>')");
@@ -535,7 +522,7 @@ QUnit.test('TestInitialize', function(assert) {
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
-    var router = new kr.ViewRouter({
+    var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
             { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
@@ -559,7 +546,7 @@ QUnit.test('TestResolve', function (assert) {
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
-    var router = new kr.ViewRouter({
+    var router = new ko.route.ViewRouter({
         views: [
             { name: 'default', model: TestModel, templateID: 'template1' },
             { name: 'other', model: TestModel, templateID: 'template1' },
@@ -574,7 +561,7 @@ QUnit.test('TestResolve', function (assert) {
         templateProvider: new FakeTemplateProvider(),
         templateContainer: $('#qunit-fixture')[0],
         createTemplates: true,
-        defaultRoutes: [
+        routes: [
             {
                 template: '{area=bean}/{view}/{action?}/{id?}',
                 defaults: { area: 'bean', view: 'default', action: 'index' },
@@ -602,7 +589,7 @@ QUnit.test('TestRespondToPathChanges', function (assert) {
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
-    var router = new kr.ViewRouter({
+    var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
             { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
@@ -669,7 +656,7 @@ QUnit.test('TestListDetailScenario', function (assert) {
         };
     };
 
-    var router = new kr.ViewRouter({
+    var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: ListViewModel, templateID: 'template1', templateSrc: 'template.html', singleton: true },
             { name: 'detail', model: DetailViewModel, templateID: 'template2', templateSrc: 'template.html' },
@@ -713,7 +700,7 @@ QUnit.test('TestAreaRouting', function (assert) {
         };
     };
     
-    var router = new kr.ViewRouter({
+    var router = new ko.route.ViewRouter({
         areas: [
             { name: 'foo' },
             { name: 'bar' }
@@ -725,7 +712,7 @@ QUnit.test('TestAreaRouting', function (assert) {
             { name: 'list', area: 'bar', model: ViewModel, templateID: 'template2', templateSrc: 'template.html' },
             { name: 'detail', area: 'bar', model: ViewModel, templateID: 'template2', templateSrc: 'template.html' },
         ],
-        defaultRoutes: [
+        routes: [
                {
                    template: '{view}/{action?}/{id?}',
                    defaults: { view: 'home', action: 'index' },
@@ -768,7 +755,7 @@ QUnit.test('TestModelOrTemplateLoadFailure', function (assert) {
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
-    var router = new kr.ViewRouter({
+    var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
             { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'should-not-exist.html' },
@@ -794,7 +781,7 @@ QUnit.test('TestObservableView', function (assert) {
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
-    var router = new kr.ViewRouter({
+    var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
             { name: 'view1', model: TestModel, templateID: 'template1' },
@@ -829,7 +816,7 @@ QUnit.test('TestObservableView', function (assert) {
 QUnit.test('TestBinding', function (assert) {
     var fixture = $('#qunit-fixture');    
 
-    fixture.append('<div id="content" data-bind="router: router"></div>');
+    fixture.append('<div id="content" data-bind="routeTemplate: router"></div>');
     fixture.append("<script type='text/html' id='template1'>Template1Content</script>");
     fixture.append("<script type='text/html' id='template2'>Template2Content</script>");
     fixture.append("<script type='text/html' id='template3'>Template3Content</script>");
@@ -839,7 +826,7 @@ QUnit.test('TestBinding', function (assert) {
     expect(4);
     
     var model = {
-        router: new kr.ViewRouter({
+        router: new ko.route.ViewRouter({
             views: [
                 { name: 'home', model: TestModel, templateID: 'template1' },
                 { name: 'view1', model: TestModel, templateID: 'template2' },
