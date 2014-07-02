@@ -11,6 +11,7 @@ Simple view model and template router for Knockout.
  - Supports data type parsing into int, float, hex
  - Supports segment constraints
  - Supports segment data type parsing (int, float, hex)
+ - ASP.NET inspired route template syntax
 - Area support for grouping views into functional areas (e.g. /person/list/, /person/view/, /widget/list/, etc.)
 
 
@@ -37,7 +38,7 @@ Add a script reference to knockroute.js, then use the routeTemplate binding.
     // Define view models here.
 
     var hostModel = {
-        router: new kr.route.Router({
+        router: new ko.route.Router({
             views: [
                 { name: 'home', model: HomeModel, templateID: 'homeTemplate' },
                 { name: 'about', model: ListModel, templateID: 'listTemplate' },
