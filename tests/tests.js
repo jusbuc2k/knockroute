@@ -397,14 +397,14 @@ QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
         dtp.unloadTemplate(document.body);
     });
             
-    dtp.loadTemplate('template1', function (result) {
+    dtp.loadTemplate({ templateID: 'template1' }, null, function (result) {
         assert.strictEqual(result.success, true);
         assert.strictEqual(result.statusCode, 203);
         assert.strictEqual(result.template.text.indexOf('Bar'), 3);
         dtp.unloadTemplate('template1');
         assert.strictEqual(result.template.text,'');
                                         
-        dtp.loadTemplate('template2', function (result) {
+        dtp.loadTemplate({ templateID: 'template2' }, null, function (result) {
             assert.strictEqual(result.success, true);
             assert.strictEqual(result.statusCode, 200);
             assert.ok(result.template.text.indexOf('<h2>It Works</h2>') >= 0);
@@ -412,7 +412,7 @@ QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
             dtp.unloadTemplate(result.template);
             assert.strictEqual(result.template.text, '');
                         
-            dtp.loadTemplate('template3', function (result) {
+            dtp.loadTemplate({ templateID: 'template3' }, null, function (result) {
                 assert.strictEqual(result.success, false);
                 assert.strictEqual(result.statusCode, 404);
                                 
@@ -472,12 +472,17 @@ function FakeTemplateProvider() {
     var self = this;
 }
 
-FakeTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
+FakeTemplateProvider.prototype.loadTemplate = function (view, container, completeCallback) {
     var response = {
         success: false,
         statusCode: 404,
-        template: $('#' + templateID)[0]
+        template: $('#' + view.templateID)[0]
     };
+
+    if (response.template == null) {
+        $('#qunit-fixture').append('<script type="text/html" id="' + view.templateID + '" data-src="' + view.templateSrc + '"></script>');
+        response.template = $('#' + view.templateID)[0];
+    }
 
     if (response.template.getAttribute("data-src") === 'template.html' || response.template.getAttribute("data-src") == null) {
         response.success = true;
@@ -489,16 +494,6 @@ FakeTemplateProvider.prototype.loadTemplate = function (templateID, completeCall
 
 FakeTemplateProvider.prototype.unloadTemplate = function (template) {
 
-};
-
-FakeTemplateProvider.prototype.getOrCreateTemplate = function (templateID, templateSrc, container) {
-    var template = $('#'+templateID)[0];
-
-    if (template == null) {
-        return $('#qunit-fixture').append('<script type="text/html" id="' + templateID + '" data-src="' + templateSrc + '"></script>')[0];
-    } else {
-        return template;
-    }
 };
 
 function TestModel($router) {
@@ -533,9 +528,11 @@ QUnit.test('TestInitialize', function(assert) {
         templateContainer: $('#qunit-fixture')[0],
         createTemplates: true
     });
+
+    router.init();
                 
-    assert.strictEqual($('#qunit-fixture #template2').length, 1, 'template2 should exist');
-    assert.strictEqual($('#qunit-fixture #template3').length, 1, 'template3 should exist');
+    assert.strictEqual($('#qunit-fixture #template2').length, 0, 'template2 should not exist');
+    assert.strictEqual($('#qunit-fixture #template3').length, 0, 'template3 should not exist');
         
     assert.strictEqual(router.view().name, 'home', 'The current view name should be correct');
     assert.strictEqual(router.view().modelInstance.message(), 'Hello World');
@@ -577,6 +574,8 @@ QUnit.test('TestResolve', function (assert) {
         ]
     });
 
+    router.init();
+
     assert.strictEqual(router.resolve({ view: 'foo', action: 'bar' }), 'foo/bar');
 
     router.pathProvider.setPath('bean/default');
@@ -585,32 +584,28 @@ QUnit.test('TestResolve', function (assert) {
 });
 
 QUnit.test('TestRespondToPathChanges', function (assert) {
-    expect(3);
+    expect(2);
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
     var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
-            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
-            { name: 'view2', model: TestModel, templateID: 'template3', templateSrc: 'should-not-exist.html' }
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
         ],
         pathProvider: new FakePathProvider(),
-        templateProvider: new FakeTemplateProvider(),
+        templateProvider: new ko.route.AjaxTemplateProvider(),
         templateContainer: $('#qunit-fixture')[0],
         createTemplates: true
     });
+
+    router.init();
 
     router.pathProvider.fakeChange('home/view1/Justin');
     assert.strictEqual(router.view().modelInstance.message(), 'Hello Justin');
 
     router.pathProvider.fakeChange('home/view1/IdForView1');
-    assert.strictEqual(router.view().modelInstance.message(), 'Hello IdForView1');
-    
-    // should throw because the template should fail to load for view 2
-    assert.throws(function () {
-        router.pathProvider.fakeChange('view2/IdForView2');
-    });
+    assert.strictEqual(router.view().modelInstance.message(), 'Hello IdForView1');    
 });
 
 QUnit.test('TestListDetailScenario', function (assert) {
@@ -666,6 +661,8 @@ QUnit.test('TestListDetailScenario', function (assert) {
         templateContainer: $('#qunit-fixture')[0],
         createTemplates: true
     });
+
+    router.init();
     
     assert.strictEqual(router.view().modelInstance.list().length, 0);
 
@@ -724,6 +721,8 @@ QUnit.test('TestAreaRouting', function (assert) {
         createTemplates: true
     });
 
+    router.init();
+
     assert.strictEqual(router.view().modelInstance.data.view, 'home');
 
     assert.strictEqual(router.resolve({ view: 'home' }), 'home/index');
@@ -766,6 +765,8 @@ QUnit.test('TestModelOrTemplateLoadFailure', function (assert) {
         templateContainer: $('#qunit-fixture')[0],
         createTemplates: true
     });
+
+    router.init();
         
     assert.throws(function () {
         router.pathProvider.fakeChange('/view1/');
@@ -791,6 +792,8 @@ QUnit.test('TestObservableView', function (assert) {
         templateProvider: new FakeTemplateProvider(),
         templateContainer: $('#qunit-fixture')[0]
     });
+
+    router.init();
 
     var lastView;
 

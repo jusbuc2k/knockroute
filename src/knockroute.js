@@ -492,7 +492,9 @@
             lastPath = path;
         }
     }
-    
+
+    kr.HashPathStringProvider = HashPathStringProvider;
+   
     function HistoryPathStringProvider(options) {
         var self = this;
         var lastPath = '';
@@ -557,6 +559,8 @@
         }
     }
 
+    kr.HistoryPathStringProvider = HistoryPathStringProvider;
+
     function DefaultModelFactory() {
         var self = this;
     }
@@ -575,22 +579,26 @@
         }
     };
 
+    kr.HistoryPathStringProvider = HistoryPathStringProvider;
+
     function DefaultTemplateProvider() {
         var self = this;
     }
 
-    DefaultTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
+    DefaultTemplateProvider.prototype.loadTemplate = function (view, templateContainer, completeCallback) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block.</summary>
-        ///<param name="templateID" type="String">The id of the &lt;script&gt; element containing the template contents or reference</param>
+        ///<param name="view" type="kr.View">The View object</param>        
+        ///<param name="templateContainer" type="HTMLElement">The HTML container where templates should be created, or null to use window.document.body</param>
         ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
-        var template = window.document.getElementById(templateID);
+        
+        var template = window.document.getElementById(view.templateID);
 
         if (!template) {
-            throw 'There is no element with id ' + templateID + '.';
+            throw 'There is no element with id ' + view.templateID + '.';
         }
 
         if (template.tagName.toLowerCase() !== 'script') {
-            throw 'The element with id ' + templateID + ' must be a <script> tag in order to use it as a template.';
+            throw 'The element with id ' + view.templateID + ' must be a <script> tag in order to use it as a template.';
         }
 
         var response = {
@@ -615,18 +623,17 @@
         //TODO: Should this do something? Should the DefaultTemplateProvider exist, or should it be none?
     };
 
-    DefaultTemplateProvider.prototype.getOrCreateTemplate = function (templateID, dataSrc, container) {
-        var template = window.document.getElementById(templateID);
-
-        if (template) {
-            return template;
-        }
-
-        throw 'The default template provider cannot create templates.';
-    };
+    kr.DefaultTemplateProvider = DefaultTemplateProvider;
     
-    function AjaxTemplateProvider() {
+    function AjaxTemplateProvider(options) {
+        
         var self = this;
+
+        var defaultOptions = {
+            createTemplates: true
+        };
+
+        this.options = kr.utils.defaults(defaultOptions, options || {});
 
         //TODO: support a default base path for templates.
         // where do we put that? a property of this object, or a param to the load and getOrCreate method, or
@@ -637,25 +644,34 @@
         }
     }
 
-    AjaxTemplateProvider.prototype.loadTemplate = function (templateID, completeCallback) {
+    AjaxTemplateProvider.prototype.loadTemplate = function (view, templateContainer, completeCallback) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source.</summary>
-        ///<param name="templateID" type="String">The id of the &lt;script&gt; element containing the template contents or reference</param>
+        ///<param name="view" type="kr.View">The View object</param>
+        ///<param name="templateContainer" type="HTMLElement">The HTML container where templates should be created, or null to use window.document.body</param>
         ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
-        var template = window.document.getElementById(templateID);
+        var template = window.document.getElementById(view.templateID);
 
-        if (!template) {
-            throw 'There is no element with id ' + templateID + '.';
+        templateContainer = templateContainer || window.document.body;
+
+        if (this.options.createTemplates && !template && view.templateSrc) {
+            template = window.document.createElement("script");
+            template.type = "text/html";
+            template.id = view.templateID;
+            template.setAttribute("data-src", view.templateSrc);
+            templateContainer.appendChild(template);
+        } else if (!template) {
+            throw "There is no templated defined with id '" + view.templateID + "'";
         }
 
         if (template.tagName.toLowerCase() !== 'script'){
-            throw 'The element with id ' + templateID + ' must be a <script> tag in order to use it as a template.';
+            throw 'The element with id ' + view.templateID + ' must be a <script> tag in order to use it as a template.';
         }
 
-        var dataSrc = template.getAttribute("data-src");
-        var dataLoaded = template.getAttribute("data-loaded");
+        var contentSrc = view.templateSrc || template.getAttribute("data-src");
+        var contentLoaded = template.getAttribute("data-loaded");
 
-        // As it turns out, this isn't the business of the loader at all.
-        //var dataPersist = (dataSrc == null || (template.getAttribute("data-persist")||'').toLowerCase().trim() === 'true');
+        // As it turns out, this isn't the business of the loader at all I don't think
+        // var dataPersist = (dataSrc == null || (template.getAttribute("data-persist")||'').toLowerCase().trim() === 'true');
 
         var response = {
             success: false,
@@ -663,8 +679,8 @@
             template: template            
         };
 
-        if (dataSrc && !dataLoaded) {
-            jQuery.get(dataSrc).done(function (content, status, ctx) {
+        if (contentSrc && !contentLoaded) {
+            jQuery.get(contentSrc).done(function (content, status, ctx) {
                 template.text = content;
                 template.setAttribute("data-loaded", "true");
                 response.success = true;
@@ -685,13 +701,13 @@
     AjaxTemplateProvider.prototype.unloadTemplate = function (template) {
         /// <signature>
         /// <summary>Unloads a template with the given ID.</summary>
-        /// <param name="template" type="String"></param>
+        /// <param name="view" type="kr.View"></param>
         /// </signature>
         /// <signature>
         /// <summary>Unloads a template specified by the given HTML element.</summary>
         /// <param name="template" type="HTMLScriptElement">A string.</param>       
         /// </signature>
-                
+                                
         if (typeof template === 'string') {
             template = window.document.getElementById(template);
         }
@@ -703,28 +719,6 @@
         template.text = '';
     };
 
-    AjaxTemplateProvider.prototype.getOrCreateTemplate = function (templateID, dataSrc, container) {
-        var template = window.document.getElementById(templateID);
-
-        container = container || window.document.body;
-
-        if (template) {
-            return template;
-        }
-
-        template = window.document.createElement("script");
-        template.type = "text/html";
-        template.id = templateID;
-        template.setAttribute("data-src", dataSrc);
-
-        container.appendChild(template);
-
-        return template;
-    };
-
-    kr.HashPathStringProvider = HashPathStringProvider;
-    kr.HistoryPathStringProvider = HistoryPathStringProvider;
-    kr.DefaultTemplateProvider = DefaultTemplateProvider;
     if (typeof jQuery !== 'undefined') {
         kr.AjaxTemplateProvider = AjaxTemplateProvider;
     }
@@ -871,7 +865,6 @@
             views: [],
             pathProvider: 'hash',
             templateProvider: 'default',
-            createTemplates: false,
             templateContainer: null
         };
 
@@ -905,18 +898,26 @@
                 view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
             }
             
+
+            //TODO This whole thing needs some work in regards to activeTemplateID.
+            // should activeTemplateID survive another action invocation, or should the templateID always
+            // be restored? I'm thinking the later, since it would require the action to call 'setTemplate'
+            // on some kind of yet-to-be-designed argument to the action method (or load)            
+            // self.templateProvider.loadTemplate() also needs to be applied in redirectSetTemplate
+
             // If the view is changing, we need to unload the existing model, and load the new template
             if (view !== currentView()) {
                 currentView().unloadModel(false, function (shouldCancel) {
                     if (shouldCancel) {
                         cancel();                        
                     } else {
-                        self.templateProvider.loadTemplate(view.templateID, function (response) {
-                            view.activeTemplateID = view.templateID;
+                        currentView().activeTemplateID = null;
+                        self.templateProvider.loadTemplate(view, options.templateContainer, function (response) {
+                            view.currentTemplateID = null;
                             if (response.success) {
                                 apply();
                             } else {
-                                throw "The template for view '" + view.name + "' failed to load with status: " + response.statusCode;
+                                throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";
                             }
                         });
                     }
@@ -1191,6 +1192,8 @@
             }
         };
 
+        self.init = init;
+
         //#endregion
 
         //#region Public observables
@@ -1292,29 +1295,12 @@
                 throw 'ViewRouter could not be initialized because no views are defined.';
             }
 
-            // call the template creator for each template with a templateSrc on the view
-            if (options.createTemplates) {
-                for (var i = 0 ; i < options.views.length; i++) {
-                    if (options.views[i].templateSrc) {
-                        self.templateProvider.getOrCreateTemplate(
-                            options.views[i].templateID,
-                            options.views[i].templateSrc,
-                            options.templateContainer
-                        );
-                    }
-                }
-            }
-
             // begin watching for path changes
 
             pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
             self.pathProvider.start();
         }
-
-        //TODO: Should we call this, or should we expose a public init() and let the binding call it?
-        // I'm favoring the later.
-        init();
-               
+              
         //#endregion
     }
 
@@ -1328,28 +1314,20 @@
             var result = ko.bindingHandlers.template.init(element, function () {
                 return '';
             });
-
             var router = ko.utils.unwrapObservable(valueAccessor());
-            var view = router.view();
-
-            var bindingValue = function () {
-                return {
-                    data: view.modelInstance,
-                    name: view.activeTemplateID
-                };
-            };
 
             router.view.subscribe(function (updatedView) {
                 var bindingValue = function () {
                     return {
                         data: updatedView.modelInstance,
-                        name: updatedView.activeTemplateID
+                        name: updatedView.activeTemplateID || updatedView.templateID
                     };
                 };
+
                 ko.bindingHandlers.template.update(element, bindingValue, allBindings, viewModel, bindingContext);
             });
 
-            ko.bindingHandlers.template.update(element, bindingValue, allBindings, viewModel, bindingContext);            
+            router.init();
             
             return result;
         },
