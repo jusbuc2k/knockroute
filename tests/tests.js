@@ -462,9 +462,11 @@ function FakePathProvider() {
         lastPath = path;
     }
 
-    self.fakeChange = function (path) {
-        _path = path;
-        hashChanged();
+    self.fakeChange = function (path) {        
+        if (path !== _path) {
+            _path = path;
+            hashChanged();
+        }
     };
 }
 
@@ -852,4 +854,40 @@ QUnit.test('TestBinding', function (assert) {
 
     model.router.setTemplate('template1');
     assert.strictEqual(contentElement.innerHTML, 'Template1Content', 'switching to template 1 without path change');
+});
+
+QUnit.test('LoadingEvents', function (assert) {
+    expect(4);
+
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+    var loadingHits = 0;
+    var loadedHits = 0;
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },            
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider(),
+        templateContainer: $('#qunit-fixture')[0]        
+    });
+
+    router.onLoading.subscribe(function () {
+        loadingHits++;
+    });
+
+    router.onLoaded.subscribe(function () {
+        loadedHits++;
+    });
+
+    router.init();
+        
+    assert.strictEqual(loadingHits, 1);
+    assert.strictEqual(loadedHits, 1);
+    
+    router.pathProvider.fakeChange('home/view1/Justin');
+    router.pathProvider.fakeChange('home/view1/Justin');
+
+    assert.strictEqual(loadingHits, 2);
+    assert.strictEqual(loadedHits, 2);
 });

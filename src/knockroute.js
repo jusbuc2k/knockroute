@@ -887,17 +887,19 @@
             var model = view.modelInstance || view.model || {};
             //var channel = channels[view.channel];
 
+            self.onLoading.notifySubscribers();
+
             function apply(templateID) {
                 hit++;
                 if (hit >= needHit) {
                     currentView(view);
+                    self.onLoaded.notifySubscribers();
                 }
             }
 
             if (typeof model === 'function') {
                 view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
             }
-            
 
             //TODO This whole thing needs some work in regards to activeTemplateID.
             // should activeTemplateID survive another action invocation, or should the templateID always
@@ -1192,6 +1194,14 @@
             }
         };
 
+        self.getOptions = function () {
+            return options;
+        };
+
+        self.setOptions = function (updatedOptions) {
+            options = kr.utils.defaults(options, updatedOptions || {});
+        };
+                
         self.init = init;
 
         //#endregion
@@ -1201,6 +1211,10 @@
         self.view = ko.computed(function () {
             return currentView();
         });
+
+        self.onLoading = new ko.subscribable();
+                        
+        self.onLoaded = new ko.subscribable();
 
         //#endregion
 
