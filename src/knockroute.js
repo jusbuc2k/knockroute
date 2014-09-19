@@ -764,6 +764,10 @@
         this.views.push(view);
     };
 
+    Area.prototype.clearViews = function () {
+        kr.utils.clearArray(this.views);
+    };
+
     kr.Area = Area;
 
     //#endregion
@@ -869,7 +873,7 @@
         };
 
         options = kr.utils.defaults(defaultOptions, options || {});
-                
+        var initialized = false;
         var defaultView = new kr.View('', null, '', null, false);
         var routes = [];
         var areas = [];
@@ -1194,12 +1198,48 @@
             }
         };
 
-        self.getOptions = function () {
-            return options;
+        self.addViews = function (addedViews) {
+            /// <summary>Adds one or more views specified in the given array to the views collection</summary>
+            /// <param name="addedViews" type="Array">A collection of views</param>            
+            var i;
+
+            if (initialized) {
+                throw 'Views cannot be added once the router is initalized';
+            }
+
+            if (addedViews && addedViews.length) {
+                for (i = 0; i < addedViews.length; i++) {
+                    options.views.push(addedViews[i]);
+                }
+            }
         };
 
-        self.setOptions = function (updatedOptions) {
-            options = kr.utils.defaults(options, updatedOptions || {});
+        self.insertRoutes = function (insertedRoutes) {
+            /// <summary>Adds one or more routes specified in the given array to the beginning of the route table</summary>
+            /// <param name="addedRoutes" type="Array">A collection of routes</param>  
+            if (initialized) {
+                throw 'Routes cannot be added once the router is initalized';
+            }
+            var i;
+            if (insertedRoutes && insertedRoutes.length) {                
+                for (i = 0; i < insertedRoutes.length; i++) {
+                    options.routes.splice(0, 0, insertedRoutes[i]);                    
+                }
+            }
+        };
+
+        self.addRoutes = function (addedRoutes) {
+            /// <summary>Adds one or more routes specified in the given array to the end of the route table</summary>
+            /// <param name="addedRoutes" type="Array">A collection of routes</param>  
+            if (initialized) {
+                throw 'Routes cannot be added once the router is initalized';
+            }
+            var i;
+            if (addedRoutes && addedRoutes.length) {                
+                for (i = 0; i < addedRoutes.length; i++) {
+                    options.routes.push(addedRoutes[i]);
+                }
+            }
         };
                 
         self.init = init;
@@ -1221,6 +1261,12 @@
         //#region Init
 
         function init() {
+            
+            if (initialized) {
+                return;
+            }
+
+            self.pathProvider.stop();
 
             // Support the popstate path provider, and fakes for testing mostly
             // (there's only so may ways you are going to persist the path)
@@ -1238,6 +1284,7 @@
                 self.templateProvider = new kr.AjaxTemplateProvider();
             }
 
+            kr.utils.clearArray(routes);
             // add all the routes from the constructor
             for (i = 0; i < options.routes.length; i++) {
                 routes.push({
@@ -1277,42 +1324,51 @@
 
 
             // add all the views used in the constructor
-            if (options.views && options.views.length) {
+            if (options.views && options.views.length) {               
                 kr.utils.clearArray(views);
                 var v;
                 var area;
-                for (var i = 0; i < options.views.length; i++) {
+                var i;
 
-                    //TODO: Is there really a use case for passing in a kr.View() vs. an anonymous obj?                    
-                    if (options.views[i] instanceof kr.View) {
-                        v = options.views[i];
-                    } else {
-                        v = new kr.View(options.views[i]);
-                    }
-
-                    if (v.area == null) {
-                        views.push(v);
-                    } else {
-                        area = self.getArea(v.area);
-
-                        if (area == null) {
-                            throw 'Invalid area name on view';
-                        }
-
-                        area.addView(v);
-                    }
+                for (i = 0; i < options.views.length; i++) {
+                    addView(options.views[i]);
                 }
-
-                // See comment on buildIndex()
-                //buildIndex();
             } else {
                 throw 'ViewRouter could not be initialized because no views are defined.';
             }
 
             // begin watching for path changes
+            if (!pathChangedEvent) {
+                pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
+                self.pathProvider.start();
+            }
+            initialized = true;
+        }
 
-            pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
-            self.pathProvider.start();
+        function addView(view) {
+            var v;
+                        
+            //TODO: Is there really a use case for passing in a kr.View() vs. an anonymous obj?                    
+            if (view instanceof kr.View) {
+                v = view;
+            } else {
+                v = new kr.View(view);
+            }
+
+            if (v.area == null) {
+                views.push(v);
+            } else {
+                area = self.getArea(v.area);
+
+                if (area == null) {
+                    throw 'Invalid area name on view';
+                }
+
+                area.addView(v);
+            }
+
+            // See comment on buildIndex()
+            //buildIndex();
         }
               
         //#endregion

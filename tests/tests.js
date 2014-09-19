@@ -891,3 +891,129 @@ QUnit.test('LoadingEvents', function (assert) {
     assert.strictEqual(loadingHits, 2);
     assert.strictEqual(loadedHits, 2);
 });
+
+//QUnit.test('TestSetOptions', function (assert) {
+//    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+//    var router = new ko.route.ViewRouter({
+//        views: [
+//            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+//            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
+//        ],
+//        pathProvider: new FakePathProvider(),
+//        templateProvider: new FakeTemplateProvider(),
+//        templateContainer: $('#qunit-fixture')[0]
+//    });
+
+//    var opts = router.getOptions();
+
+//    expect(3);
+
+//    assert.ok(opts);
+//    assert.strictEqual(opts.views.length, 2);
+
+//    router.setOptions({
+//        views: [
+//            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+//        ]
+//    });
+
+//    opts = router.getOptions();
+//    assert.strictEqual(opts.views.length, 1);
+//});
+
+QUnit.test('TestAddViews', function (assert) {
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider(),
+        templateContainer: $('#qunit-fixture')[0]
+    });
+
+    expect(2);
+
+    router.addViews([        
+        { name: 'view3', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+    ]);
+
+    router.init();
+
+    var view3 = router.getView('view3');
+    assert.ok(view3);
+
+    assert.throws(function () {
+        router.addViews([
+            { name: 'view4', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+        ]);
+    });
+
+});
+
+QUnit.test('TestAddRoutes', function (assert) {
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+    var router = new ko.route.ViewRouter({
+        routes:[],
+        views: [
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },           
+            { name: 'home0', model: TestModel, templateID: 'template1', templateSrc: 'template.html' }            
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider(),
+        templateContainer: $('#qunit-fixture')[0]
+    });
+
+    expect(4);
+    
+    router.addRoutes([
+        {
+            template: '{view}/{action?}/{id?}',
+            defaults: { view: 'home', action: 'index' }
+        }
+    ]);
+
+    router.init();
+
+    assert.throws(function () {
+       router.addRoutes([]);
+    });
+
+    assert.throws(function () {
+        router.insertRoutes([]);
+    });
+
+    assert.strictEqual(router.view().name, 'home');
+
+    var router2 = new ko.route.ViewRouter({
+        routes:[ 
+            {
+                template: '{view}/{action?}/{id?}',
+                defaults: { view: 'home', action: 'index' }
+            }
+        ],
+        views: [
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'home0', model: TestModel, templateID: 'template1', templateSrc: 'template.html' }           
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider(),
+        templateContainer: $('#qunit-fixture')[0]
+    });
+
+    router2.insertRoutes([{
+        template: '{view}/{action?}/{id?}',
+        defaults: { view: 'home0', action: 'index0' }
+    }]);
+
+    router2.init();
+
+    assert.strictEqual(router2.view().name, 'home0');
+
+});
