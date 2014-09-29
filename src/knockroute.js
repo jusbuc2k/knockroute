@@ -1,7 +1,4 @@
-﻿/// <reference path="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js" />
-/// <reference path="http://code.jquery.com/jquery-1.11.0.min.js" />
-
-; (function (global, ko) {
+﻿; (function (global, ko) {
     
     var kr = {};
 
