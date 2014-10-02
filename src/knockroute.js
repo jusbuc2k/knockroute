@@ -7,6 +7,10 @@
         ko.bindingHandlers['routeTemplate'] = routerBinding;
     }
 
+    function isTrue(element, attribute) {
+        return ((element.getAttribute(attribute) || '').toLowerCase().trim() === 'true');
+    }
+
     //#region Utils
 
     kr.utils = kr.utils || {};
@@ -582,10 +586,9 @@
         var self = this;
     }
 
-    DefaultTemplateProvider.prototype.loadTemplate = function (view, templateContainer, completeCallback) {
+    DefaultTemplateProvider.prototype.loadTemplate = function (view, completeCallback) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block.</summary>
         ///<param name="view" type="kr.View">The View object</param>        
-        ///<param name="templateContainer" type="HTMLElement">The HTML container where templates should be created, or null to use window.document.body</param>
         ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
         
         var template = window.document.getElementById(view.templateID);
@@ -610,7 +613,7 @@
     DefaultTemplateProvider.prototype.unloadTemplate = function (template) {
         /// <signature>
         /// <summary>Unloads a template with the given ID.</summary>
-        /// <param name="template" type="String"></param>
+        /// <param name="templateID" type="String"></param>
         /// </signature>
         /// <signature>
         /// <summary>Unloads a template specified by the given HTML element.</summary>
@@ -627,7 +630,8 @@
         var self = this;
 
         var defaultOptions = {
-            createTemplates: true
+            createTemplates: true,
+            templateContainer: null
         };
 
         this.options = kr.utils.defaults(defaultOptions, options || {});
@@ -641,14 +645,12 @@
         }
     }
 
-    AjaxTemplateProvider.prototype.loadTemplate = function (view, templateContainer, completeCallback) {
+    AjaxTemplateProvider.prototype.loadTemplate = function (view, completeCallback) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source.</summary>
         ///<param name="view" type="kr.View">The View object</param>
-        ///<param name="templateContainer" type="HTMLElement">The HTML container where templates should be created, or null to use window.document.body</param>
         ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
         var template = window.document.getElementById(view.templateID);
-
-        templateContainer = templateContainer || window.document.body;
+        var templateContainer = this.options.templateContainer || window.document.body;
 
         if (this.options.createTemplates && !template && view.templateSrc) {
             template = window.document.createElement("script");
@@ -657,7 +659,7 @@
             template.setAttribute("data-src", view.templateSrc);
             templateContainer.appendChild(template);
         } else if (!template) {
-            throw "There is no templated defined with id '" + view.templateID + "'";
+            throw "There is no template defined with id '" + view.templateID + "'";
         }
 
         if (template.tagName.toLowerCase() !== 'script'){
@@ -665,9 +667,11 @@
         }
 
         var contentSrc = view.templateSrc || template.getAttribute("data-src");
-        var contentLoaded = template.getAttribute("data-loaded");
+        var contentLoaded = isTrue(template, "data-loaded");
 
         // As it turns out, this isn't the business of the loader at all I don't think
+        // Q: WHY IS IT NOT THE BUSINESS? WHAT WERE YOU THINKING? ARG....
+        // A: I think it's the business of the router to call the unload method...
         // var dataPersist = (dataSrc == null || (template.getAttribute("data-persist")||'').toLowerCase().trim() === 'true');
 
         var response = {
@@ -698,7 +702,7 @@
     AjaxTemplateProvider.prototype.unloadTemplate = function (template) {
         /// <signature>
         /// <summary>Unloads a template with the given ID.</summary>
-        /// <param name="view" type="kr.View"></param>
+        /// <param name="templateID" type="String"></param>
         /// </signature>
         /// <signature>
         /// <summary>Unloads a template specified by the given HTML element.</summary>
@@ -713,6 +717,12 @@
             throw 'The \'template\' parameter must be an element ID or an HTMLScriptElement';
         }
 
+        // if the template is marked as persistent (data-persist), don't actually unload it.
+        if (isTrue(template, 'data-persist')) {
+            return;
+        }
+
+        template.setAttribute("data-loaded","false");
         template.text = '';
     };
 
@@ -865,8 +875,7 @@
             areas: [],
             views: [],
             pathProvider: 'hash',
-            templateProvider: 'default',
-            templateContainer: null
+            templateProvider: 'default'
         };
 
         options = kr.utils.defaults(defaultOptions, options || {});
@@ -890,9 +899,10 @@
 
             self.onLoading.notifySubscribers();
 
-            function apply(templateID) {
+            function apply() {
                 hit++;
                 if (hit >= needHit) {
+                    currentView().activeTemplateID = view.templateID;
                     currentView(view);
                     self.onLoaded.notifySubscribers();
                 }
@@ -908,19 +918,24 @@
             // on some kind of yet-to-be-designed argument to the action method (or load)            
             // self.templateProvider.loadTemplate() also needs to be applied in redirectSetTemplate
 
-            // If the view is changing, we need to unload the existing model, and load the new template
-            if (view !== currentView()) {
+            // If the view is changing, we need to unload the existing model, unload the existing template, and load the new template
+            if (view !== currentView()) {                
                 currentView().unloadModel(false, function (shouldCancel) {
                     if (shouldCancel) {
-                        cancel();                        
+                        cancel();                
                     } else {
-                        currentView().activeTemplateID = null;
-                        self.templateProvider.loadTemplate(view, options.templateContainer, function (response) {
-                            view.currentTemplateID = null;
+                        if (currentView().activeTemplateID && currentView().activeTemplateID !== view.templateID)
+                        {
+                            self.templateProvider.unloadTemplate(currentView().activeTemplateID);
+                            currentView().activeTemplateID = null;                                   
+                        }
+                        self.templateProvider.loadTemplate(view, function (response) {
+                            view.activeTemplateID = view.templateID;
                             if (response.success) {
                                 apply();
                             } else {
-                                throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";
+                                self.onLoadError.notifySubscribers();
+                                throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";                                
                             }
                         });
                     }
@@ -929,20 +944,18 @@
                 apply();
             }
 
-            //TODO: is this really the best way to do this? Would it be better
-            // to pass a parameter to the load method that has a way to do this?
-            // something like actionContext.setTemplate() or some crap as a parameter?
-
-            redirectSetTemplate = function (templateID) {
-                view.activeTemplateID = templateID;
-            };
+            //JB: this won't work anyway, because loadTemplate has already been called at this point.            
+            //redirectSetTemplate = function (templateID) {
+            //    view.activeTemplateID = templateID;
+            //};
 
             view.executeAction('load', routeValues, function (result) {
                 redirectSetTemplate = null;
                 if (result == null || result === true) {
                     apply();
                 } else {
-                    throw "The model for view '" + view.name + "' failed to load.";
+                    self.onLoadError.notifySubscribers();
+                    throw "The model for view '" + view.name + "' failed to load.";                    
                 }
             });
             
@@ -954,7 +967,6 @@
             //        // WHAT?
             //    }
             //});
-
         }
 
         function getMatchingViewAndRouteValues(path) {
@@ -1252,6 +1264,8 @@
         self.onLoading = new ko.subscribable();
                         
         self.onLoaded = new ko.subscribable();
+
+        self.onLoadError = new ko.subscribable();
 
         //#endregion
 
