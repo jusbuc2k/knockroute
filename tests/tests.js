@@ -999,6 +999,65 @@ QUnit.test('TestAddRoutes', function (assert) {
 
 });
 
+QUnit.test('TestInitRoutes', function (assert) {
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'about', model: TestModel, templateID: 'template1', templateSrc: 'template.html' }
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0]
+        })
+    });
+
+    expect(2);
+
+    assert.throws(function () {
+        router.resolve({ view: 'home' });
+    });
+
+    router.initRoutes();
+ 
+    assert.strictEqual( router.resolve({ view: 'home' }), 'home/index');
+
+});
+
+QUnit.test('TestClearRoutes', function (assert) {
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'about', model: TestModel, templateID: 'template1', templateSrc: 'template.html' }
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0]
+        })
+    });
+
+    expect(2);
+        
+    router.initRoutes();
+
+    assert.strictEqual( router.resolve({ view: 'home' }), 'home/index');
+
+    router.clearRoutes();    
+    router.addRoutes([
+        {
+            template: '{view}/{action?}/{id?}',
+            defaults: { view: 'home', action: 'foo' }
+        }
+    ]);
+    router.initRoutes();
+
+    assert.strictEqual( router.resolve({ view: 'home' }), 'home/foo');
+
+});
+
 QUnit.test('TestTemplateLoadUnload', function (assert) {
     expect(3);
 

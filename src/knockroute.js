@@ -1226,7 +1226,7 @@
         self.insertRoutes = function (insertedRoutes) {
             /// <summary>Adds one or more routes specified in the given array to the beginning of the route table</summary>
             /// <param name="addedRoutes" type="Array">A collection of routes</param>  
-            if (initialized) {
+            if (routesInitialized) {
                 throw 'Routes cannot be added once the router is initalized';
             }
             var i;
@@ -1250,8 +1250,33 @@
                 }
             }
         };
+
+        self.insertRoutes = function (insertedRoutes) {
+            /// <summary>Adds one or more routes specified in the given array to the beginning of the route table</summary>
+            /// <param name="addedRoutes" type="Array">A collection of routes</param>  
+            if (initialized) {
+                throw 'Routes cannot be added once the router is initalized';
+            }
+            var i;
+            if (insertedRoutes && insertedRoutes.length) {
+                for (i = 0; i < insertedRoutes.length; i++) {
+                    options.routes.splice(0, 0, insertedRoutes[i]);
+                }
+            }
+        };
+
+        self.clearRoutes = function () {
+            /// <summary>Removes all existing routes from the route table.</summary>
+            if (initialized) {
+                throw 'Routes cannot be modified once the router is initalized';
+            }
+
+            kr.utils.clearArray(options.routes);
+        };
                 
         self.init = init;
+
+        self.initRoutes = initRoutes;
 
         //#endregion
 
@@ -1271,28 +1296,9 @@
 
         //#region Init
 
-        function init() {
-            
+        function initRoutes() {
             if (initialized) {
                 return;
-            }
-
-            self.pathProvider.stop();
-
-            // Support the popstate path provider, and fakes for testing mostly
-            // (there's only so may ways you are going to persist the path)
-            if (typeof options.pathProvider === 'object') {
-                self.pathProvider = options.pathProvider;
-            } else if (options.pathProvider === 'history') {
-                self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
-            }
-
-            // Support fakes for testing mostly
-            // (Or other template storage/fetching mechanisms I guess)
-            if (typeof options.templateProvider === 'object') {
-                self.templateProvider = options.templateProvider;
-            } else if (options.templateProvider === 'ajax') {
-                self.templateProvider = new kr.AjaxTemplateProvider();
             }
 
             kr.utils.clearArray(routes);
@@ -1303,13 +1309,13 @@
                     defaults: options.routes[i].defaults
                 });
             };
-    
+
             // add all the areas used in the constructor
             if (options.areas && options.areas.length) {
                 kr.utils.clearArray(areas);
                 var area;
                 var areaRoutes = [];
-                               
+
                 for (var i = 0; i < options.areas.length; i++) {
                     area = new kr.Area(options.areas[i]);
                     areas.push(area);
@@ -1323,7 +1329,7 @@
                         });
                     }
                 }
-                 
+
                 // put area routes at the end of the route table so they aren't tried first
                 for (var i = 0; i < areaRoutes.length; i++) {
                     routes.push({
@@ -1332,7 +1338,35 @@
                     });
                 }
             }
+            
+            routesInitialized = true;
+        }
 
+        function init() {
+            
+            if (initialized) {
+                return;
+            }
+
+            self.pathProvider.stop();
+
+            // Support fakes for testing mostly
+            // (Or other template storage/fetching mechanisms I guess)
+            if (typeof options.templateProvider === 'object') {
+                self.templateProvider = options.templateProvider;
+            } else if (options.templateProvider === 'ajax') {
+                self.templateProvider = new kr.AjaxTemplateProvider();
+            }
+
+            // Support the popstate path provider, and fakes for testing mostly
+            // (there's only so may ways you are going to persist the path)
+            if (typeof options.pathProvider === 'object') {
+                self.pathProvider = options.pathProvider;
+            } else if (options.pathProvider === 'history') {
+                self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
+            }
+            
+            initRoutes();
 
             // add all the views used in the constructor
             if (options.views && options.views.length) {               
