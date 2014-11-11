@@ -897,19 +897,21 @@
             var model = view.modelInstance || view.model || {};
             //var channel = channels[view.channel];
 
-            self.onLoading.notifySubscribers();
+            self.onLoading.notifySubscribers(routeValues);
 
             function apply() {
                 hit++;
                 if (hit >= needHit) {
                     currentView().activeTemplateID = view.templateID;
                     currentView(view);
-                    self.onLoaded.notifySubscribers();
+                    self.onLoaded.notifySubscribers(routeValues);
                 }
             }
 
             if (typeof model === 'function') {
                 view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
+            } else {
+                view.modelInstance = model;
             }
 
             //TODO This whole thing needs some work in regards to activeTemplateID.
