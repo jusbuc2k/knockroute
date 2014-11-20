@@ -852,6 +852,50 @@
     //#endregion
     
     //#region View Router
+
+    function HitCounter(requiredCount, context) {
+        this.requiredCount = requiredCount;
+        this.hitCount = 0;
+        this.callbacks = [];
+        this.state = 'pending';
+        this.context = context;
+    }
+    
+    HitCounter.prototype.hit = function() {
+        var i;
+        this.hitCount++;        
+        if (this.hitCount >= this.requiredCount && this.state === 'pending') {
+            this.state = 'resolved';                        
+            for (i = 0; i < this.callbacks.length; i++) {
+                if (typeof this.callbacks[i][0] === 'function') {
+                    this.callbacks[i][0].call(this.context);
+                }
+            }
+        }
+    };
+
+    HitCounter.prototype.reject = function () {
+        var i;
+        for (i = 0; i < this.callbacks.length; i++) {
+            if (typeof this.callbacks[i][1] === 'function') {
+                this.callbacks[i][1].call(this.context);
+            }
+        }
+    };
+
+    HitCounter.prototype.then = function (successCallback, failCallback) {
+        if (this.state === 'pending') {
+            this.callbacks.push([successCallback, failCallback]);
+        } else if (this.state === 'resolved' && typeof successCallback === 'function') {
+            successCallback(this.context);
+        } else if (this.state === 'rejected' && typeof failCallback === 'function') {
+            failCallback(this.context);
+        }
+    };
+
+    HitCounter.prototype.abort = function () {
+        this.state = 'aborted';
+    };
            
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
@@ -886,27 +930,27 @@
         var views = [];
         var pathChangedEvent;
         var redirectSetTemplate = null;
+        var setCurrentCounter;
         
         //#region Privates
 
         var currentView = ko.observable(defaultView);
 
         function setCurrent(view, routeValues, cancel) {
-            var hit = 0;
-            var needHit = 2;
+            if (typeof setCurrentCounter !== 'undefined') {
+                setCurrentCounter.abort();
+            }
+            setCurrentCounter = new HitCounter(2);
             var model = view.modelInstance || view.model || {};
             //var channel = channels[view.channel];
 
             self.onLoading.notifySubscribers(routeValues);
 
-            function apply() {
-                hit++;
-                if (hit >= needHit) {
-                    currentView().activeTemplateID = view.templateID;
-                    currentView(view);
-                    self.onLoaded.notifySubscribers(routeValues);
-                }
-            }
+            setCurrentCounter.then(function () {                                
+                currentView(view);
+                currentView().activeTemplateID = view.templateID;
+                self.onLoaded.notifySubscribers(routeValues);                
+            });
 
             if (typeof model === 'function') {
                 view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
@@ -934,7 +978,7 @@
                         self.templateProvider.loadTemplate(view, function (response) {
                             view.activeTemplateID = view.templateID;
                             if (response.success) {
-                                apply();
+                                setCurrentCounter.hit();
                             } else {
                                 self.onLoadError.notifySubscribers();
                                 throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";                                
@@ -943,7 +987,7 @@
                     }
                 });
             } else {
-                apply();
+                setCurrentCounter.hit();
             }
 
             //JB: this won't work anyway, because loadTemplate has already been called at this point.            
@@ -954,7 +998,7 @@
             view.executeAction('load', routeValues, function (result) {
                 redirectSetTemplate = null;
                 if (result == null || result === true) {
-                    apply();
+                    setCurrentCounter.hit();
                 } else {
                     self.onLoadError.notifySubscribers();
                     throw "The model for view '" + view.name + "' failed to load.";                    

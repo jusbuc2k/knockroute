@@ -1093,3 +1093,60 @@ QUnit.test('TestTemplateLoadUnload', function (assert) {
     router.pathProvider.fakeChange('view2');
     assert.strictEqual(currentTemplateID, 'template2', 'template2 should have loaded');
 });
+
+QUnit.asyncTest('TestAbortPrevious', function (assert) {
+    var fixture = $('#qunit-fixture');
+
+    fixture.append('<div id="content" data-bind="routeTemplate: router"></div>');
+    fixture.append("<script type='text/html' id='homeTemplate'>HomeContent</script>");
+    fixture.append("<script type='text/html' id='aboutTemplate'>AboutContent</script>");    
+
+    var contentElement = $('#content')[0];
+
+    expect(3);
+
+    var loadCount = 0;
+
+    var vm = {
+        load: function (routeValues) {            
+            if (routeValues.view === 'home') {
+                var def = new $.Deferred();
+
+                window.setTimeout(function () {                    
+                    console.log('TestAbortPrevious: loadComplete for home');
+                    def.resolve();
+                }, 100);
+
+                return def.promise();
+            } else {
+                console.log('TestAbortPrevious: loadComplete for about');
+                return true;
+            }
+        }
+    };
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: vm, templateID: 'homeTemplate' },
+            { name: 'about', model: vm, templateID: 'aboutTemplate' }
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: fixture[0]
+        })
+    });
+
+    router.init();
+        
+    assert.equal(router.view().name, null);
+    
+    router.navigate({ view: 'about' });
+    assert.strictEqual(router.view().activeTemplateID, 'aboutTemplate');
+
+    window.setTimeout(function () {
+        // should be aboutTemplate, because the navigate() above should have cancelled the original request
+        // event though the load request for the home model completes after this.
+        assert.strictEqual(router.view().activeTemplateID, 'aboutTemplate');
+        QUnit.start();
+    }, 200);
+});
