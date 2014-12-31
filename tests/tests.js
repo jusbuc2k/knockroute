@@ -159,7 +159,7 @@ QUnit.test('TestParseRoute', function(assert) {
 });
 
 QUnit.test('TestMatch', function (assert) {
-    expect(21);
+    expect(22);
 
     var rv;
     var route1 = new ko.route.Route('{view}');
@@ -170,6 +170,7 @@ QUnit.test('TestMatch', function (assert) {
         route1.match();
     });
     assert.ok(!route1.match(''));
+    assert.ok(route1.match('/foo'));
         
     var route2 = new ko.route.Route('{view}/{id?}');
     assert.ok(rv = route2.match('/Foo/123'), 'Path should match');    
@@ -202,6 +203,69 @@ QUnit.test('TestMatch', function (assert) {
     assert.ok(rv = new ko.route.Route('{channel}/{view}/{id?}').match('', { channel: 'default', view: 'index' }));
     assert.strictEqual(rv.channel, 'default');
     assert.strictEqual(rv.view, 'index');
+    
+});
+
+QUnit.test('TestMatchParams', function (assert) {
+    expect(15);
+
+    var rv;
+    var route1 = new ko.route.Route('{view}/{rest:params}');
+    assert.ok(rv = route1.match('foobar'), 'Path should match');
+    assert.strictEqual(rv.view, 'foobar');
+    assert.strictEqual(rv.rest, undefined);
+
+    assert.ok(rv = route1.match('foobar/a/b/c'), 'Path should match');    
+    assert.strictEqual(rv.view, 'foobar');
+    assert.strictEqual(rv.rest.length, 3);
+    assert.strictEqual(rv.rest[0], 'a');
+    assert.strictEqual(rv.rest[1], 'b');
+    assert.strictEqual(rv.rest[2], 'c');
+
+    var route2 = new ko.route.Route('{view}/{id?}/{rest:params?}');
+    assert.ok(rv = route2.match('foobar'), 'Path should match');
+    assert.strictEqual(rv.view, 'foobar');
+    assert.ok(rv = route2.match('foobar/123'), 'Path should match');
+    assert.strictEqual(rv.id, '123');
+    assert.ok(rv = route2.match('foobar/123/a/b/c'), 'Path should match');
+    assert.strictEqual(rv.rest.length, 3);
+
+});
+
+QUnit.test('TestResolveParams', function (assert) {
+    expect(11);
+
+    var rv;
+    var route1 = new ko.route.Route('{view}/{rest:params}');
+    assert.ok(rv = route1.match('foobar/a/b/c'), 'Path should match');
+    assert.strictEqual(rv.view, 'foobar');
+    assert.strictEqual(rv.rest.length, 3);
+    assert.strictEqual(rv.rest[0], 'a');
+    assert.strictEqual(rv.rest[1], 'b');
+    assert.strictEqual(rv.rest[2], 'c');
+
+    
+    assert.strictEqual(route1.resolve(rv), 'foobar/a/b/c');
+    assert.strictEqual(route1.resolve({ view: 'foobar', rest: [] }), 'foobar');
+    assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['a'] }), 'foobar/a');
+    assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['a', 'b'] }), 'foobar/a/b');
+    assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['a', 'b', 'c'] }), 'foobar/a/b/c');
+});
+
+QUnit.test('TestMatchWithContraints', function (assert) {
+    expect(7);
+
+    var rv;
+    var route1 = new ko.route.Route('{view}/{foo=bar?}');
+    assert.ok(rv = route1.match('foobar'), 'Path should match');
+    assert.ok(!route1.match('foobar/bax'), 'Path should not match');
+
+    var route2 = new ko.route.Route('{view}/{foo=bar}');
+    assert.ok(!route2.match('foobar'), 'Path should not match');
+    assert.ok(!route2.match('foobar/bax'), 'Path should not match');
+    assert.ok(rv = route2.match('foobar/bar'), 'Path should match');
+    assert.strictEqual(rv.view, 'foobar');
+    assert.strictEqual(rv.foo, 'bar');    
     
 });
 
@@ -760,6 +824,7 @@ QUnit.test('TestModelOrTemplateLoadFailure', function (assert) {
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
+    var sawError = false;
     var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
@@ -774,14 +839,21 @@ QUnit.test('TestModelOrTemplateLoadFailure', function (assert) {
     });
 
     router.init();
-        
-    assert.throws(function () {
-        router.pathProvider.fakeChange('/view1/');
-    });
+
+    var sub = router.onLoadError.subscribe(function () {
+        sawError = true;
+    })
 
     assert.throws(function () {
-        router.pathProvider.fakeChange('/view2/?fail=123');        
+        // This should throw an error because the template fails to load
+        router.pathProvider.fakeChange('/view1/');
     });
+        
+    // This shouldn't throw an error, because the view model should handle it's own errors
+    router.pathProvider.fakeChange('/view2/?fail=123');
+    assert.ok(sawError);
+
+    sub.dispose();
 });
 
 QUnit.test('TestObservableView', function (assert) {

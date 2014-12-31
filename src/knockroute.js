@@ -188,17 +188,32 @@
 
                 if (segParts.length === 1) {
                     var optional = false;
-                   
-                    routeSegments.push({
-                        value: templateSegments[i],
-                        parts: [{
-                            name: segParts[0][1],
-                            optional: optional = (segParts[0][3] === '?'),
-                            type: 'parameter',
-                            constraint: createConstraint(segParts[0][2]),
-                            dataType: (segParts[0][2] && segParts[0][2][0] === ':' ? segParts[0][2].slice(1) : 'string')
-                        }]
-                    });
+
+                    var dataType = (segParts[0][2] && segParts[0][2][0] === ':' ? segParts[0][2].slice(1) : 'string');
+
+                    if (dataType === 'params') {
+                        routeSegments.push({
+                            value: templateSegments[i],
+                            parts: [{
+                                name: segParts[0][1],
+                                optional: true,
+                                type: 'params',                             
+                                dataType: 'string'
+                            }]
+                        });
+                        optional = true;
+                    } else {                   
+                        routeSegments.push({
+                            value: templateSegments[i],
+                            parts: [{
+                                name: segParts[0][1],
+                                optional: optional = (segParts[0][3] === '?'),
+                                type: 'parameter',
+                                constraint: createConstraint(segParts[0][2]),
+                                dataType: dataType
+                            }]
+                        });
+                    }
                    
                     if (hasOptional && !optional) {
                         throw 'Invalid route template: A required segment cannot follow an optional one.';
@@ -285,8 +300,8 @@
                     if (part.name !== pathSegment) {
                         return null;
                     }
-                } else if (part.type === 'wildcard') {
-                    // nothing to do
+                } else if (part.type === 'wildcard') {     
+                        // nothing to do if the wildcard is not the last position
                 } else if (part.type === 'parameter' && pathSegment.length > 0) {
                     if (part.constraint == null || part.constraint(pathSegment)) {
                         routeValues[part.name] = Route.parseSegmentValue(pathSegment, part.dataType);
@@ -302,6 +317,13 @@
                     } else {
                         return null;
                     }
+                } else if (part.type === 'params' && this.segments.length - 1 == i) {
+                    // if the params is in the last position, we parse combine all remaining path segments into an array
+
+                    routeValues[part.name] = pathSegments.slice(i);
+                    
+                    // we are done processing segments
+                    break;
                 } else {
                     // invalid route segment part
                     return null;
@@ -407,6 +429,14 @@
 
                     } else {
                         return null;
+                    }
+                } else if (routePart.type === 'params' && i == this.segments.length - 1) {
+                    var params = routeValues[routePart.name];
+                    if (params) {
+                        params = params.join(this.options.pathSeperator);
+                        if (params.length) {
+                            pathParts.push(params);
+                        }
                     }
                 }
             } else {
@@ -801,15 +831,18 @@
         ko.utils.extend(self, kr.utils.defaults(defaultProps, attributes || {}));
     }
 
-    View.prototype.executeAction = function(action, routeValues, callback) {
+    View.prototype.executeAction = function(action, routeValues, callback, failCallback) {
         var self = this;        
         if (typeof this.modelInstance === 'object' && typeof this.modelInstance[action] === 'function') {
-            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues), function(){
-                callback();
-            }, function() {
-                throw 'Action ' + action + ' failed to execute.';
+            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues), callback, function () {
+                if (typeof failCallback === 'function') {
+                    failCallback.apply(this, arguments);
+                } else {
+                    throw 'Action ' + action + ' failed to execute.';
+                }
             });
-        } else {
+        }
+        else {
             throw 'Invalid action name or model instance.';
         }
     };
@@ -944,12 +977,12 @@
             var model = view.modelInstance || view.model || {};
             //var channel = channels[view.channel];
 
-            self.onLoading.notifySubscribers(routeValues);
+            self.onLoading.notifySubscribers({ routeValues: routeValues, context: this });
 
             setCurrentCounter.then(function () {                                
                 currentView(view);
                 currentView().activeTemplateID = view.templateID;
-                self.onLoaded.notifySubscribers(routeValues);                
+                self.onLoaded.notifySubscribers({ routeValues: routeValues, context: this});                
             });
 
             if (typeof model === 'function') {
@@ -980,7 +1013,7 @@
                             if (response.success) {
                                 setCurrentCounter.hit();
                             } else {
-                                self.onLoadError.notifySubscribers();
+                                self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: null });
                                 throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";                                
                             }
                         });
@@ -997,12 +1030,15 @@
 
             view.executeAction('load', routeValues, function (result) {
                 redirectSetTemplate = null;
-                if (result == null || result === true) {
-                    setCurrentCounter.hit();
-                } else {
-                    self.onLoadError.notifySubscribers();
-                    throw "The model for view '" + view.name + "' failed to load.";                    
-                }
+                setCurrentCounter.hit();
+                //if (result == null || result === true) {
+                    
+                //} else {
+                //    self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: arguments });
+                //    throw "The model for view '" + view.name + "' failed to load.";                    
+                //}
+            }, function () {
+                self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: arguments });
             });
             
             //YAGNI: Defer this idea until later...
