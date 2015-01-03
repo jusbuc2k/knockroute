@@ -116,6 +116,49 @@ QUnit.test('events', function (assert) {
     btn.click();
 });
 
+QUnit.module('View');
+
+QUnit.test('ExecuteAction', function (assert) {
+    expect(3);
+
+    var tmp;
+    var viewWithEmptyModel = new ko.route.View({
+        name: 'test',
+        area: null,
+        model: {
+            load: function(rv){
+                tmp = rv.foo;
+                return true;
+            },
+            bar: function (rv) {
+                tmp = rv.foo;
+                return true;
+            }
+        },
+        modelInstance: null,
+        templateID: 't123',
+        activeTemplateID: null,
+        templateSrc: null,
+        singleton: false,
+    });
+
+    viewWithEmptyModel.modelInstance = viewWithEmptyModel.model;
+
+    viewWithEmptyModel.executeAction('load', { foo: 'Hello World' }, function () {
+        assert.strictEqual(tmp, 'Hello World');
+    });
+
+    viewWithEmptyModel.executeAction('bar', { foo: 'Hello Bar' }, function () {
+        assert.strictEqual(tmp, 'Hello Bar');
+    });
+
+    viewWithEmptyModel.executeAction('nuts', { foo: 'Hello Bar' }, function () {
+        assert.ok(false, 'this should not get hit');
+    }, function() {
+        assert.ok(true);
+    });
+});
+
 QUnit.module('Route');
 
 QUnit.test('TestParseRoute', function(assert) {
@@ -772,9 +815,7 @@ QUnit.test('TestModelOrTemplateLoadFailure', function (assert) {
         router.pathProvider.fakeChange('/view1/');
     });
 
-    assert.throws(function () {
-        router.pathProvider.fakeChange('/view2/?fail=123');        
-    });
+    
 });
 
 QUnit.test('TestObservableView', function (assert) {

@@ -790,16 +790,20 @@
         ko.utils.extend(self, kr.utils.defaults(defaultProps, attributes || {}));
     }
 
-    View.prototype.executeAction = function(action, routeValues, callback) {
-        var self = this;        
-        if (typeof this.modelInstance === 'object' && typeof this.modelInstance[action] === 'function') {
-            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues), function(){
-                callback();
-            }, function() {
-                throw 'Action ' + action + ' failed to execute.';
+    View.prototype.executeAction = function(action, routeValues, successCallback, failCallback) {
+        var self = this;
+        if (this.modelInstance && typeof this.modelInstance[action] === 'function') {
+            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues),function() {
+                successCallback();
+            }, function () {
+                if (typeof failCallback === 'function') {
+                    failCallback();
+                }
             });
         } else {
-            throw 'Invalid action name or model instance.';
+            if (typeof failCallback === 'function') {
+                failCallback();
+            }
         }
     };
 
@@ -941,6 +945,8 @@
                 } else {
                     throw "The model for view '" + view.name + "' failed to load.";
                 }
+            }, function () {
+                apply();
             });
             
             //YAGNI: Defer this idea until later...
