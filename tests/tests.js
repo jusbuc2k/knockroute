@@ -704,7 +704,7 @@ QUnit.test('TestRespondToPathChanges', function (assert) {
             { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
         ],
         pathProvider: new FakePathProvider(),
-        templateProvider: new ko.route.AjaxTemplateProvider({
+        templateProvider: new FakeTemplateProvider({
             templateContainer: $('#qunit-fixture')[0],
             createTemplates: true
         })        
@@ -712,11 +712,62 @@ QUnit.test('TestRespondToPathChanges', function (assert) {
 
     router.init();
 
-    router.pathProvider.fakeChange('home/view1/Justin');
+    router.pathProvider.fakeChange('view1/Justin');
     assert.strictEqual(router.view().modelInstance.message(), 'Hello Justin');
 
-    router.pathProvider.fakeChange('home/view1/IdForView1');
+    router.pathProvider.fakeChange('home/IdForView1');
     assert.strictEqual(router.view().modelInstance.message(), 'Hello IdForView1');    
+});
+
+QUnit.test('TestUpdateAfterLoad', function (assert) {
+    expect(7);
+
+    function ViewModel($router) {
+        var self = this;
+        var loaded = false;
+
+        self.id = null;
+
+        self.load = function (routeValues) {
+            loaded = true;
+            self.id = routeValues.id;
+            return true;
+        };
+
+        self.update = function (routeValues) {
+            assert.ok(loaded, 'load should be called before update');
+            self.id = routeValues.id;
+        };
+
+        self.unload = function () {
+            assert.ok(loaded, 'load should be called before unload');
+        };
+    };
+    
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'foo', model: ViewModel, templateID: 'template2', templateSrc: 'template.html' },
+        ],       
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    router.init();
+
+    router.navigate('foo/abc');
+    var instance = router.view().modelInstance;
+    assert.strictEqual(instance.id, 'abc');
+
+    router.navigate('foo/def');
+    assert.strictEqual(instance, router.view().modelInstance, 'should be same instance');
+    assert.strictEqual(instance.id, 'def');
+
+    router.navigate('home');
+    assert.strictEqual(router.view().name, 'home');
 });
 
 QUnit.test('TestListDetailScenario', function (assert) {
@@ -740,8 +791,11 @@ QUnit.test('TestListDetailScenario', function (assert) {
                 self.list.removeAll();
                 self.dateLoaded(null);
             }
-
             return true;
+        };
+
+        self.update = function (routeValues) {
+            self.load(routeValues);
         };
 
         self.unload = function (e) {
@@ -766,6 +820,12 @@ QUnit.test('TestListDetailScenario', function (assert) {
         views: [
             { name: 'home', model: ListViewModel, templateID: 'template1', templateSrc: 'template.html', singleton: true },
             { name: 'detail', model: DetailViewModel, templateID: 'template2', templateSrc: 'template.html' },
+        ],
+        routes: [
+               {
+                   template: '{view}/{action?}/{id?}',
+                   defaults: { view: 'home', action: 'index' },
+               }
         ],
         pathProvider: new FakePathProvider(),
         templateProvider: new FakeTemplateProvider({
@@ -1008,8 +1068,8 @@ QUnit.test('LoadingEvents', function (assert) {
     assert.strictEqual(loadingHits, 1);
     assert.strictEqual(loadedHits, 1);
     
-    router.pathProvider.fakeChange('home/view1/Justin');
-    router.pathProvider.fakeChange('home/view1/Justin');
+    router.pathProvider.fakeChange('home/Justin');
+    router.pathProvider.fakeChange('view1/Bob');
 
     assert.strictEqual(loadingHits, 2);
     assert.strictEqual(loadedHits, 2);
@@ -1136,7 +1196,7 @@ QUnit.test('TestInitRoutes', function (assert) {
 
     router.initRoutes();
  
-    assert.strictEqual( router.resolve({ view: 'home' }), 'home/index');
+    assert.strictEqual( router.resolve({ view: 'home' }), 'home');
 
 });
 
@@ -1158,7 +1218,7 @@ QUnit.test('TestClearRoutes', function (assert) {
         
     router.initRoutes();
 
-    assert.strictEqual( router.resolve({ view: 'home' }), 'home/index');
+    assert.strictEqual( router.resolve({ view: 'home' }), 'home');
 
     router.clearRoutes();    
     router.addRoutes([

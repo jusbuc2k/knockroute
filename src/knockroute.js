@@ -834,8 +834,10 @@
     View.prototype.executeAction = function(action, routeValues, successCallback, failCallback) {
         var self = this;
         if (this.modelInstance && typeof this.modelInstance[action] === 'function') {
-            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues),function() {
-                successCallback();
+            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues), function () {
+                if (typeof successCallback === 'function') {
+                    successCallback();
+                }
             }, function () {
                 if (typeof failCallback === 'function') {
                     failCallback();
@@ -875,7 +877,7 @@
         }
 
         if (this.modelInstance != null && typeof this.modelInstance.unload === 'function') {  
-            kr.utils.nowOrThen(this.modelInstance.unload(e), done, done)
+            kr.utils.nowOrThen(this.modelInstance.unload(e), done, done);
         } else {
             done();
         }
@@ -944,12 +946,14 @@
         var defaultOptions = {
             routes: [
                 {
-                    template: '{view}/{action?}/{id?}',
-                    defaults: { view: 'home', action: 'index' },
+                    template: '{view}/{id?}',
+                    defaults: { view: 'home' },
                 }
             ],
             viewRouteKey: 'view',
-            areaRouteKey: 'area',
+            areaRouteKey: 'area',            
+            loadMethodName: 'load',
+            updateMethodName: 'update',
             areas: [],
             views: [],
             pathProvider: 'hash',
@@ -957,6 +961,7 @@
         };
 
         options = kr.utils.defaults(defaultOptions, options || {});
+
         var initialized = false;
         var defaultView = new kr.View('', null, '', null, false);
         var routes = [];
@@ -971,16 +976,19 @@
         var currentView = ko.observable(defaultView);
 
         function setCurrent(view, routeValues, cancel) {
+            var model;
+
             if (typeof setCurrentCounter !== 'undefined') {
                 setCurrentCounter.abort();
             }
-            setCurrentCounter = new HitCounter(2);
-            var model = view.modelInstance || view.model || {};
+
+            setCurrentCounter = new HitCounter(2);            
+            model = view.modelInstance || view.model || {};
             //var channel = channels[view.channel];
 
             self.onLoading.notifySubscribers({ routeValues: routeValues, context: this });
 
-            setCurrentCounter.then(function () {                                
+            setCurrentCounter.then(function () {
                 currentView(view);
                 currentView().activeTemplateID = view.templateID;
                 self.onLoaded.notifySubscribers({ routeValues: routeValues, context: this});                
@@ -1028,28 +1036,17 @@
             //redirectSetTemplate = function (templateID) {
             //    view.activeTemplateID = templateID;
             //};
-
-            view.executeAction('load', routeValues, function (result) {
+                        
+            view.executeAction(options.loadMethodName, routeValues, function (result) {
                 redirectSetTemplate = null;
-                setCurrentCounter.hit();
-                //if (result == null || result === true) {
-                    
-                //} else {
-                //    self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: arguments });
-                //    throw "The model for view '" + view.name + "' failed to load.";                    
-                //}
+                setCurrentCounter.hit();                
             }, function () {
                 self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: arguments });
             });
-            
-            //YAGNI: Defer this idea until later...
-            //view.executeAction(routeValues.action, routeValues, function (result) {
-            //    if (result != null && typeof result.templateID === 'string') {
-            //        // WHAT?
-            //    } else {
-            //        // WHAT?
-            //    }
-            //});
+
+            setCurrentCounter.then(function () {
+                view.executeAction(options.updateMethodName, routeValues);
+            });
         }
 
         function getMatchingViewAndRouteValues(path) {
@@ -1120,14 +1117,18 @@
             if (ctx.view == null) {
                 //TODO: make this not suck
                 throw 'No view available.';
-            }                                   
-                                   
-            setCurrent(ctx.view, ctx.routeValues, function () {
-                self.pathProvider.stop();
-                self.pathProvider.revert(function () {
-                    self.pathProvider.start();
-                });                
-            });
+            }
+
+            if (ctx.view === currentView()) {
+                ctx.view.executeAction(options.updateMethodName, ctx.routeValues);
+            } else {
+                setCurrent(ctx.view, ctx.routeValues, function () {
+                    self.pathProvider.stop();
+                    self.pathProvider.revert(function () {
+                        self.pathProvider.start();
+                    });
+                });
+            }
         }
         
         //TODO: Premature optmization here, see if we need it later
