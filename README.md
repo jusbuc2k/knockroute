@@ -38,7 +38,7 @@ Add a script reference to knockroute.js, then use the routeTemplate binding.
     // Define view models here.
 
     var hostModel = {
-        router: new ko.route.Router({
+        router: new ko.route.ViewRouter({
             views: [
                 { name: 'home', model: HomeModel, templateID: 'homeTemplate' },
                 { name: 'about', model: ListModel, templateID: 'listTemplate' },
