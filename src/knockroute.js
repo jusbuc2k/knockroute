@@ -725,7 +725,8 @@
 
         var defaultOptions = {
             createTemplates: true,
-            templateContainer: null
+            templateContainer: null,
+            cache: true
         };
 
         this.options = kr.utils.defaults(defaultOptions, options || {});
@@ -750,7 +751,14 @@
             template = window.document.createElement("script");
             template.type = "text/html";
             template.id = view.templateID;
-            template.setAttribute("data-src", view.templateSrc);
+            if (this.options.cache) {
+                template.setAttribute("data-src", view.templateSrc + '?v=' + new Date().getTime().toString());
+            } else {
+                template.setAttribute("data-src", view.templateSrc);
+            }
+            if (view.templatePersist) {
+                template.setAttribute('data-persist', 'true');
+            }
             templateContainer.appendChild(template);
         } else if (!template) {
             throw "There is no template defined with id '" + view.templateID + "'";
@@ -775,6 +783,10 @@
         };
 
         if (contentSrc && !contentLoaded) {
+            if (!this.options.cache) {
+                contentSrc += '?v=' + new Date().getTime().toString();
+            }
+
             jQuery.get(contentSrc).done(function (content, status, ctx) {
                 template.text = content;
                 template.setAttribute("data-loaded", "true");
@@ -889,6 +901,7 @@
             templateID: null,
             activeTemplateID: null,
             templateSrc: null,
+            templatePersist: false,
             singleton: false,
         };
 
@@ -952,8 +965,7 @@
     //#endregion
     
     //#region View Router
-
-          
+              
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
         /// <param name="options" type="Object">A set of options.</param>
