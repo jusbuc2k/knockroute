@@ -412,19 +412,25 @@ QUnit.module('Providers');
 
 QUnit.asyncTest('TestHashPathStringProvider', function (assert) {
     var psp = new ko.route.HashPathStringProvider();
-    expect(5);
+    expect(10);
 
     window.location.hash = '#';
 
     psp.start();
-       
+
+    assert.strictEqual(psp.decorate(''), '#/');
+    assert.strictEqual(psp.decorate('foo'), '#/foo');
+    assert.strictEqual(psp.decorate('#foo'), '#/foo');
+    assert.strictEqual(psp.decorate('/foo'), '#/foo');
+    assert.strictEqual(psp.decorate('#/foo'), '#/foo');
+
     window.setTimeout(function () {
         assert.strictEqual(psp.getPath(), '');
         psp.setPath('foobar');
 
         window.setTimeout(function () {
-            assert.strictEqual(window.location.hash, '#foobar');
-            assert.strictEqual(psp.getPath(), 'foobar');
+            assert.strictEqual(window.location.hash, '#/foobar');
+            assert.strictEqual(psp.getPath(), '/foobar');
             psp.setPath('/foo/bar');
             
             window.setTimeout(function () {
@@ -450,7 +456,7 @@ QUnit.asyncTest('TestHashPathStringProviderEvents', function (assert) {
         psp.revert();
 
         window.setTimeout(function () {
-            assert.ok(window.location.hash === '#' || window.location.hash==='');
+            assert.ok(window.location.hash === '#' || window.location.hash === '');
             QUnit.start();
         },20);
     });
@@ -547,6 +553,10 @@ function FakePathProvider() {
 
     self.getPath = function () {
         return _path;
+    };
+
+    self.decorate = function (path) {
+        return path;
     };
 
     self.start = function () {
@@ -1194,7 +1204,7 @@ QUnit.test('TestInitRoutes', function (assert) {
         router.resolve({ view: 'home' });
     });
 
-    router.initRoutes();
+    router.init();
  
     assert.strictEqual( router.resolve({ view: 'home' }), 'home');
 

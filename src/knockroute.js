@@ -141,6 +141,51 @@
             return null;
         }
     }
+
+    // Sort of like a promise, but requires that hit() be called N number of times before then callbacks are fired.
+    function HitCounter(requiredCount, context) {
+        this.requiredCount = requiredCount;
+        this.hitCount = 0;
+        this.callbacks = [];
+        this.state = 'pending';
+        this.context = context;
+    }
+
+    HitCounter.prototype.hit = function () {
+        var i;
+        this.hitCount++;
+        if (this.hitCount >= this.requiredCount && this.state === 'pending') {
+            this.state = 'resolved';
+            for (i = 0; i < this.callbacks.length; i++) {
+                if (typeof this.callbacks[i][0] === 'function') {
+                    this.callbacks[i][0].call(this.context);
+                }
+            }
+        }
+    };
+
+    HitCounter.prototype.reject = function () {
+        var i;
+        for (i = 0; i < this.callbacks.length; i++) {
+            if (typeof this.callbacks[i][1] === 'function') {
+                this.callbacks[i][1].call(this.context);
+            }
+        }
+    };
+
+    HitCounter.prototype.then = function (successCallback, failCallback) {
+        if (this.state === 'pending') {
+            this.callbacks.push([successCallback, failCallback]);
+        } else if (this.state === 'resolved' && typeof successCallback === 'function') {
+            successCallback.call(this.context);
+        } else if (this.state === 'rejected' && typeof failCallback === 'function') {
+            failCallback.call(this.context);
+        }
+    };
+
+    HitCounter.prototype.abort = function () {
+        this.state = 'aborted';
+    };
     
     //#endregion
 
@@ -491,12 +536,28 @@
 
         self.pathChanged = new ko.subscribable();
                         
-        self.setPath = function (path) {            
-            window.location.hash = '#' + path;
+        self.setPath = function (path) {
+            if (path) {
+                window.location.hash = self.decorate(path);
+            } else {
+                window.location.hash = '';
+            }
         };
 
         self.getPath = function () {
             return window.location.hash.slice(1);
+        };
+
+        self.decorate = function (path) {
+            if (path.indexOf('#/') === 0) {
+                return path;
+            } else if (path[0] === '/') {
+                return '#' + path;
+            } else if (path[0] === '#') {
+                return '#/' + path.slice(1);
+            } else {
+                return '#/' + path;
+            }            
         };
 
         self.start = function () {
@@ -545,6 +606,10 @@
 
         self.getPath = function () {
             return stripBase(window.location.pathname);
+        };
+
+        self.decorate = function (path) {
+            return path;
         };
 
         self.start = function () {
@@ -619,10 +684,9 @@
     DefaultTemplateProvider.prototype.loadTemplate = function (view, completeCallback) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block.</summary>
         ///<param name="view" type="kr.View">The View object</param>        
-        ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
-        
+        ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>        
         var template = window.document.getElementById(view.templateID);
-
+        
         if (!template) {
             throw 'There is no element with id ' + view.templateID + '.';
         }
@@ -637,7 +701,7 @@
             template: template
         };
 
-        completeCallback(response);      
+        completeCallback(response);
     };
 
     DefaultTemplateProvider.prototype.unloadTemplate = function (template) {
@@ -707,7 +771,7 @@
         var response = {
             success: false,
             statusCode: 0,
-            template: template            
+            template: template
         };
 
         if (contentSrc && !contentLoaded) {
@@ -889,50 +953,7 @@
     
     //#region View Router
 
-    function HitCounter(requiredCount, context) {
-        this.requiredCount = requiredCount;
-        this.hitCount = 0;
-        this.callbacks = [];
-        this.state = 'pending';
-        this.context = context;
-    }
-    
-    HitCounter.prototype.hit = function() {
-        var i;
-        this.hitCount++;        
-        if (this.hitCount >= this.requiredCount && this.state === 'pending') {
-            this.state = 'resolved';                        
-            for (i = 0; i < this.callbacks.length; i++) {
-                if (typeof this.callbacks[i][0] === 'function') {
-                    this.callbacks[i][0].call(this.context);
-                }
-            }
-        }
-    };
-
-    HitCounter.prototype.reject = function () {
-        var i;
-        for (i = 0; i < this.callbacks.length; i++) {
-            if (typeof this.callbacks[i][1] === 'function') {
-                this.callbacks[i][1].call(this.context);
-            }
-        }
-    };
-
-    HitCounter.prototype.then = function (successCallback, failCallback) {
-        if (this.state === 'pending') {
-            this.callbacks.push([successCallback, failCallback]);
-        } else if (this.state === 'resolved' && typeof successCallback === 'function') {
-            successCallback(this.context);
-        } else if (this.state === 'rejected' && typeof failCallback === 'function') {
-            failCallback(this.context);
-        }
-    };
-
-    HitCounter.prototype.abort = function () {
-        this.state = 'aborted';
-    };
-           
+          
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
         /// <param name="options" type="Object">A set of options.</param>
@@ -1017,13 +1038,14 @@
                             self.templateProvider.unloadTemplate(currentView().activeTemplateID);
                             currentView().activeTemplateID = null;                                   
                         }
+
                         self.templateProvider.loadTemplate(view, function (response) {
                             view.activeTemplateID = view.templateID;
                             if (response.success) {
                                 setCurrentCounter.hit();
                             } else {
                                 self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: null });
-                                throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";                                
+                                throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";
                             }
                         });
                     }
@@ -1231,7 +1253,7 @@
                 }
             }
             
-            if (route == null){
+            if (route == null) {
                 throw 'No matching route for current path.';
             }
 
@@ -1248,11 +1270,12 @@
             kr.utils.defaults(defaults, routeValues);
 
             path += route.resolve(routeValues, currentPath);
+
             if (hasQuery) {
                 path += (queryMarker + kr.utils.serializeQueryString(nvc));
             }
 
-            return path;
+            return this.pathProvider.decorate(path);
         }
 
         self.navigate = function (routeValues) {
@@ -1426,30 +1449,13 @@
             routesInitialized = true;
         }
 
-        function init() {
-            
+        function init() {            
             if (initialized) {
                 return;
             }
 
             self.pathProvider.stop();
-
-            // Support fakes for testing mostly
-            // (Or other template storage/fetching mechanisms I guess)
-            if (typeof options.templateProvider === 'object') {
-                self.templateProvider = options.templateProvider;
-            } else if (options.templateProvider === 'ajax') {
-                self.templateProvider = new kr.AjaxTemplateProvider();
-            }
-
-            // Support the popstate path provider, and fakes for testing mostly
-            // (there's only so may ways you are going to persist the path)
-            if (typeof options.pathProvider === 'object') {
-                self.pathProvider = options.pathProvider;
-            } else if (options.pathProvider === 'history') {
-                self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
-            }
-            
+                        
             initRoutes();
 
             // add all the views used in the constructor
@@ -1498,6 +1504,22 @@
 
             // See comment on buildIndex()
             //buildIndex();
+        }
+
+        // Support fakes for testing mostly
+        // (Or other template storage/fetching mechanisms I guess)
+        if (typeof options.templateProvider === 'object') {
+            self.templateProvider = options.templateProvider;
+        } else if (options.templateProvider === 'ajax') {
+            self.templateProvider = new kr.AjaxTemplateProvider();
+        }
+
+        // Support the popstate path provider, and fakes for testing mostly
+        // (there's only so may ways you are going to persist the path)
+        if (typeof options.pathProvider === 'object') {
+            self.pathProvider = options.pathProvider;
+        } else if (options.pathProvider === 'history') {
+            self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
         }
               
         //#endregion
