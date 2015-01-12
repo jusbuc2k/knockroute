@@ -11,6 +11,13 @@ QUnit.done(function () {
 
 QUnit.module('Utils');
 
+QUnit.test('Promise', function (assert) {
+    expect(2);
+
+    assert.ok(typeof Promise, 'function');
+    assert.strictEqual(typeof Promise.all, 'function');
+});
+
 QUnit.test('defaults', function (assert) {
     expect(4);
 
@@ -54,50 +61,63 @@ QUnit.test('queryString', function (assert) {
     assert.strictEqual(ko.route.utils.serializeQueryString(qs), 'foo=bar&beer=nuts');
 });
 
-QUnit.test('nowOrThen', function (assert) {
-    expect(9);
+QUnit.asyncTest('nowOrThen', function (assert) {
+    expect(5);
+    QUnit.stop(4);
 
-    var sHit = 0;
-    var success = function () {
-        sHit++;
+    var resultOK = function (result) {
+        assert.strictEqual(result, true);
+        QUnit.start();
     };
 
-    var fHit = 0;
-    var fail = function () {
-        fHit++;
+    var resultFail = function(result){
+        assert.strictEqual(result, false);
+        QUnit.start();
     };
 
-    var promise = {
-        then: function (s, f) {
-            assert.strictEqual(s, success);
-            assert.strictEqual(f, fail);
-        }
-    };
+    ko.route.utils.nowOrThen(true).then(resultOK, resultOK);
 
-    var jqd = {
-        done: function (s) {
-            assert.strictEqual(s, success);
-            return jqd;
+    ko.route.utils.nowOrThen(false).then(resultFail, resultFail);
+
+    ko.route.utils.nowOrThen(new Promise(function (resolve) {
+        resolve(true);
+    })).then(resultOK, resultOK);
+
+    var jqdOK = {
+        done: function (fn) {
+            fn(true);
+            return this;
         },
-        fail: function (f) {
-            assert.strictEqual(f, fail);
-            return jqd;
+        fail: function (fn) {
+            return this;
         }
     };
 
-    ko.route.utils.nowOrThen(true, success, fail);
-    assert.strictEqual(sHit, 1);
-    ko.route.utils.nowOrThen(false, success, fail);
-    assert.strictEqual(fHit, 1);
+    var jqdOKTest = function (args) {
+        assert.ok(args && args[0] === true);
+        QUnit.start();
+    };
 
-    ko.route.utils.nowOrThen(promise, success, fail);
-    assert.strictEqual(sHit, 1);
-    ko.route.utils.nowOrThen(jqd, success, fail);
-    assert.strictEqual(fHit, 1);
+    ko.route.utils.nowOrThen(jqdOK).then(jqdOKTest, jqdOKTest);
 
-    ko.route.utils.nowOrThen(null, success, fail);
-    assert.strictEqual(fHit, 2);
-   
+    var jqdFail = {
+        done: function (fn) {
+            return this;
+        },
+        fail: function (fn) {
+            fn(false);
+            return this;
+        }
+    };
+
+    var jqdFailTest = function (args) {
+        assert.ok(args && args[0] === false);
+        QUnit.start();
+    };
+
+    ko.route.utils.nowOrThen(jqdFail).then(jqdFailTest, jqdFailTest).then(null, function(){
+        QUnit.start();
+    });
 });
 
 QUnit.test('events', function (assert) {
@@ -118,46 +138,46 @@ QUnit.test('events', function (assert) {
 
 QUnit.module('View');
 
-QUnit.test('ExecuteAction', function (assert) {
-    expect(3);
+//QUnit.test('ExecuteAction', function (assert) {
+//    expect(3);
 
-    var tmp;
-    var viewWithEmptyModel = new ko.route.View({
-        name: 'test',
-        area: null,
-        model: {
-            load: function(rv){
-                tmp = rv.foo;
-                return true;
-            },
-            bar: function (rv) {
-                tmp = rv.foo;
-                return true;
-            }
-        },
-        modelInstance: null,
-        templateID: 't123',
-        activeTemplateID: null,
-        templateSrc: null,
-        singleton: false,
-    });
+//    var tmp;
+//    var viewWithEmptyModel = new ko.route.View({
+//        name: 'test',
+//        area: null,
+//        model: {
+//            load: function(rv){
+//                tmp = rv.foo;
+//                return true;
+//            },
+//            bar: function (rv) {
+//                tmp = rv.foo;
+//                return true;
+//            }
+//        },
+//        modelInstance: null,
+//        templateID: 't123',
+//        activeTemplateID: null,
+//        templateSrc: null,
+//        singleton: false,
+//    });
 
-    viewWithEmptyModel.modelInstance = viewWithEmptyModel.model;
+//    viewWithEmptyModel.modelInstance = viewWithEmptyModel.model;
 
-    viewWithEmptyModel.executeAction('load', { foo: 'Hello World' }, function () {
-        assert.strictEqual(tmp, 'Hello World');
-    });
+//    viewWithEmptyModel.executeAction('load', { foo: 'Hello World' }, function () {
+//        assert.strictEqual(tmp, 'Hello World');
+//    });
 
-    viewWithEmptyModel.executeAction('bar', { foo: 'Hello Bar' }, function () {
-        assert.strictEqual(tmp, 'Hello Bar');
-    });
+//    viewWithEmptyModel.executeAction('bar', { foo: 'Hello Bar' }, function () {
+//        assert.strictEqual(tmp, 'Hello Bar');
+//    });
 
-    viewWithEmptyModel.executeAction('nuts', { foo: 'Hello Bar' }, function () {
-        assert.ok(false, 'this should not get hit');
-    }, function() {
-        assert.ok(true);
-    });
-});
+//    viewWithEmptyModel.executeAction('nuts', { foo: 'Hello Bar' }, function () {
+//        assert.ok(false, 'this should not get hit');
+//    }, function() {
+//        assert.ok(true);
+//    });
+//});
 
 QUnit.module('Route');
 
@@ -510,14 +530,14 @@ QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
         dtp.unloadTemplate(document.body);
     });
             
-    dtp.loadTemplate({ templateID: 'template1' }, function (result) {
+    dtp.loadTemplate({ templateID: 'template1' }).then(function (result) {
         assert.strictEqual(result.success, true);
         assert.strictEqual(result.statusCode, 203);
         assert.strictEqual(result.template.text.indexOf('Bar'), 3);
         dtp.unloadTemplate('template1');
         assert.strictEqual(result.template.text,'');
                                         
-        dtp.loadTemplate({ templateID: 'template2' }, function (result) {
+        dtp.loadTemplate({ templateID: 'template2' }).then(function (result) {
             assert.strictEqual(result.success, true);
             assert.strictEqual(result.statusCode, 200);
             assert.ok(result.template.text.indexOf('<h2>It Works</h2>') >= 0);
@@ -525,7 +545,7 @@ QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
             dtp.unloadTemplate(result.template);
             assert.strictEqual(result.template.text, '');
                         
-            dtp.loadTemplate({ templateID: 'template3' }, function (result) {
+            dtp.loadTemplate({ templateID: 'template3' }).then(undefined, function (result) {
                 assert.strictEqual(result.success, false);
                 assert.strictEqual(result.statusCode, 404);
 
@@ -590,7 +610,7 @@ function FakeTemplateProvider() {
     var self = this;
 }
 
-FakeTemplateProvider.prototype.loadTemplate = function (view, completeCallback) {
+FakeTemplateProvider.prototype.loadTemplate = function (view) {
     var response = {
         success: false,
         statusCode: 404,
@@ -607,11 +627,15 @@ FakeTemplateProvider.prototype.loadTemplate = function (view, completeCallback) 
         response.statusCode = 200;
     }
 
-    completeCallback(response);
+    if (response.statusCode === 200) {
+        return Promise.resolve(response);
+    } else {
+        return Promise.reject(response);
+    }    
 };
 
 FakeTemplateProvider.prototype.unloadTemplate = function (template) {
-
+    return Promise.resolve(null);
 };
 
 function TestModel($router) {
@@ -630,12 +654,15 @@ function TestModel($router) {
 
 //#endregion
 
-QUnit.test('TestInitialize', function(assert) {
+QUnit.asyncTest('TestInitialize', function(assert) {
     expect(4);
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
     var router = new ko.route.ViewRouter({
+        templates: [
+            { templateID: 'template1' }
+        ],
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
             { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
@@ -649,12 +676,13 @@ QUnit.test('TestInitialize', function(assert) {
     });
 
     router.init();
-                
-    assert.strictEqual($('#qunit-fixture #template2').length, 0, 'template2 should not exist');
-    assert.strictEqual($('#qunit-fixture #template3').length, 0, 'template3 should not exist');
-        
-    assert.strictEqual(router.view().name, 'home', 'The current view name should be correct');
-    assert.strictEqual(router.view().modelInstance.message(), 'Hello World');
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().name, 'home', 'The current view name should be correct');
+        assert.strictEqual(router.view().modelInstance.message(), 'Hello World');
+        assert.strictEqual($('#qunit-fixture #template2').length, 0, 'template2 should not exist');
+        assert.strictEqual($('#qunit-fixture #template3').length, 0, 'template3 should not exist');
+        QUnit.start();
+    }, 1);
 });
 
 QUnit.test('TestResolve', function (assert) {
@@ -667,7 +695,7 @@ QUnit.test('TestResolve', function (assert) {
             { name: 'default', model: TestModel, templateID: 'template1' },
             { name: 'other', model: TestModel, templateID: 'template1' },
             { name: 'foo', area: 'bean', model: TestModel, templateID: 'template1' },
-        { name: 'default', area: 'bean', model: TestModel, templateID: 'template1' }
+            { name: 'default', area: 'bean', model: TestModel, templateID: 'template1' }
         ],
         areas: [
             { name: 'bean' },
@@ -695,7 +723,6 @@ QUnit.test('TestResolve', function (assert) {
     });
 
     router.init();
-
     assert.strictEqual(router.resolve({ view: 'foo', action: 'bar' }), 'foo/bar');
 
     router.pathProvider.setPath('bean/default');
@@ -703,11 +730,12 @@ QUnit.test('TestResolve', function (assert) {
     
 });
 
-QUnit.test('TestRespondToPathChanges', function (assert) {
+QUnit.asyncTest('TestRespondToPathChanges', function (assert) {
     expect(2);
-
+    
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
-
+    
+    var sub;
     var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
@@ -723,13 +751,20 @@ QUnit.test('TestRespondToPathChanges', function (assert) {
     router.init();
 
     router.pathProvider.fakeChange('view1/Justin');
-    assert.strictEqual(router.view().modelInstance.message(), 'Hello Justin');
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().modelInstance.message(), 'Hello Justin');
 
-    router.pathProvider.fakeChange('home/IdForView1');
-    assert.strictEqual(router.view().modelInstance.message(), 'Hello IdForView1');    
+        router.pathProvider.fakeChange('home/IdForView1');
+        window.setTimeout(function () {
+            assert.strictEqual(router.view().modelInstance.message(), 'Hello IdForView1');
+
+            QUnit.start();
+        }, 1);
+    }, 1);    
+
 });
 
-QUnit.test('TestUpdateAfterLoad', function (assert) {
+QUnit.asyncTest('TestUpdateAfterLoad', function (assert) {
     expect(7);
 
     function ViewModel($router) {
@@ -769,18 +804,28 @@ QUnit.test('TestUpdateAfterLoad', function (assert) {
     router.init();
 
     router.navigate('foo/abc');
-    var instance = router.view().modelInstance;
-    assert.strictEqual(instance.id, 'abc');
+    window.setTimeout(function () {
+        var instance = router.view().modelInstance;
+        assert.strictEqual(instance.id, 'abc');
 
-    router.navigate('foo/def');
-    assert.strictEqual(instance, router.view().modelInstance, 'should be same instance');
-    assert.strictEqual(instance.id, 'def');
+        router.navigate('foo/def');
+        window.setTimeout(function () {
+            assert.strictEqual(instance, router.view().modelInstance, 'should be same instance');
+            assert.strictEqual(instance.id, 'def');
 
-    router.navigate('home');
-    assert.strictEqual(router.view().name, 'home');
+            router.navigate('home');
+            window.setTimeout(function () {                
+                assert.strictEqual(router.view().name, 'home');
+
+                QUnit.start();
+                router.destroy();
+            }, 1);
+        },1)
+    },1)
+   
 });
 
-QUnit.test('TestListDetailScenario', function (assert) {
+QUnit.asyncTest('TestListDetailScenario', function (assert) {
     expect(7);
 
     function ListViewModel($router, $channel) {
@@ -846,25 +891,36 @@ QUnit.test('TestListDetailScenario', function (assert) {
 
     router.init();
     
-    assert.strictEqual(router.view().modelInstance.list().length, 0);
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().modelInstance.list().length, 0);
 
-    router.navigate({ view: 'home', action: 'search' });
-    var listLoaded = router.view().modelInstance.dateLoaded();
-    assert.ok(listLoaded);
-    assert.strictEqual(router.view().modelInstance.list().length, 10);
-    
-    router.navigate({ view: 'detail', action: 'view', id: 1 });
-    assert.strictEqual(router.view().modelInstance.item(), '1');
+        router.navigate({ view: 'home', action: 'search' });
+        window.setTimeout(function () {
+            var listLoaded = router.view().modelInstance.dateLoaded();
+            assert.ok(listLoaded);
+            assert.strictEqual(router.view().modelInstance.list().length, 10);
 
-    router.navigate({ view: 'home', action: 'search' });
-    assert.strictEqual(router.view().modelInstance.dateLoaded(), listLoaded);
-    assert.strictEqual(router.view().modelInstance.list().length, 10);
+            router.navigate({ view: 'detail', action: 'view', id: 1 });
+            window.setTimeout(function () {
+                assert.strictEqual(router.view().modelInstance.item(), '1');
 
-    router.navigate({ view: 'home' });
-    assert.strictEqual(router.view().modelInstance.list().length, 0);    
+                router.navigate({ view: 'home', action: 'search' });
+                window.setTimeout(function () {
+                    assert.strictEqual(router.view().modelInstance.dateLoaded(), listLoaded);
+                    assert.strictEqual(router.view().modelInstance.list().length, 10);
+
+                    router.navigate({ view: 'home' });
+                    window.setTimeout(function () {
+                        assert.strictEqual(router.view().modelInstance.list().length, 0);
+                        QUnit.start();
+                    }, 1);
+                }, 1)
+            }, 1);
+        }, 1);
+    }, 1);
 });
 
-QUnit.test('TestAreaRouting', function (assert) {
+QUnit.asyncTest('TestAreaRouting', function (assert) {
     expect(13);
 
     function ViewModel($router) {
@@ -906,38 +962,45 @@ QUnit.test('TestAreaRouting', function (assert) {
 
     router.init();
 
-    assert.strictEqual(router.view().modelInstance.data.view, 'home');
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().modelInstance.data.view, 'home');
 
-    assert.strictEqual(router.resolve({ view: 'home' }), 'home/index');
-    assert.strictEqual(router.resolve({ view: 'home', id: 123 }), 'home/index/123');
-    assert.strictEqual(router.resolve({ view: 'home', id: 123 }), 'home/index/123');
+        assert.strictEqual(router.resolve({ view: 'home' }), 'home/index');
+        assert.strictEqual(router.resolve({ view: 'home', id: 123 }), 'home/index/123');
+        assert.strictEqual(router.resolve({ view: 'home', id: 123 }), 'home/index/123');
 
-    // foo area
-    assert.strictEqual(router.resolve({ view: 'home', area: 'foo' }), 'foo/home/index');
-    assert.strictEqual(router.resolve({ view: 'home', area: 'foo', id: 123 }), 'foo/home/index/123');
-    assert.strictEqual(router.resolve({ view: 'home', area: 'foo', id: 123 }), 'foo/home/index/123');
+        // foo area
+        assert.strictEqual(router.resolve({ view: 'home', area: 'foo' }), 'foo/home/index');
+        assert.strictEqual(router.resolve({ view: 'home', area: 'foo', id: 123 }), 'foo/home/index/123');
+        assert.strictEqual(router.resolve({ view: 'home', area: 'foo', id: 123 }), 'foo/home/index/123');
 
-    router.pathProvider.fakeChange('foo/list');
-    assert.strictEqual(router.view().modelInstance.data.area, 'foo');
-    assert.strictEqual(router.view().modelInstance.data.view, 'list');
-    assert.strictEqual(router.view().modelInstance.data.action, 'index');
+        router.pathProvider.fakeChange('foo/list');
+        window.setTimeout(function () {
 
-    router.pathProvider.fakeChange('bar/detail/baz');
-    assert.strictEqual(router.view().modelInstance.data.area, 'bar');
-    assert.strictEqual(router.view().modelInstance.data.view, 'detail');
-    assert.strictEqual(router.view().modelInstance.data.action, 'baz');
+            assert.strictEqual(router.view().modelInstance.data.area, 'foo');
+            assert.strictEqual(router.view().modelInstance.data.view, 'list');
+            assert.strictEqual(router.view().modelInstance.data.action, 'index');
 
-    //assert.strictEqual(router.view().modelInstance.data.area, 'bar');
-    //assert.strictEqual(router.view().modelInstance.data.view, 'detail');
-    //assert.strictEqual(router.view().modelInstance.data.action, 'baz');
+            router.pathProvider.fakeChange('bar/detail/baz');
+            window.setTimeout(function () {
+                assert.strictEqual(router.view().modelInstance.data.area, 'bar');
+                assert.strictEqual(router.view().modelInstance.data.view, 'detail');
+                assert.strictEqual(router.view().modelInstance.data.action, 'baz');
+
+                QUnit.start();
+            });
+        }, 1);
+    }, 1);
 });
 
-QUnit.test('TestModelOrTemplateLoadFailure', function (assert) {
+QUnit.asyncTest('TestModelOrTemplateLoadFailure', function (assert) {
     expect(2);
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+    $('#qunit-fixture').append("<script type='text/html' id='errorTemplate'>Error</script>");
 
     var sawError = false;
+
     var router = new ko.route.ViewRouter({
         views: [
             { name: 'home', model: TestModel, templateID: 'template1' },
@@ -952,24 +1015,56 @@ QUnit.test('TestModelOrTemplateLoadFailure', function (assert) {
     });
 
     router.init();
+    
+    router.pathProvider.fakeChange('/view1/');
 
-    var sub = router.onLoadError.subscribe(function () {
-        sawError = true;
-    })
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().errorContent, 'An error occurred while loading the view.');
 
-    assert.throws(function () {
-        // This should throw an error because the template fails to load
-        router.pathProvider.fakeChange('/view1/');
-    });
-        
-    // This shouldn't throw an error, because the view model should handle it's own errors
-    router.pathProvider.fakeChange('/view2/?fail=123');
-    assert.ok(sawError);
+        router.pathProvider.fakeChange('/view2/?fail=123');
+        window.setTimeout(function () {
+            assert.ok(true);
+            QUnit.start();
+        }, 1);        
+    }, 1);
 
-    sub.dispose();
+//    sub.dispose();
 });
 
-QUnit.test('TestObservableView', function (assert) {
+QUnit.asyncTest('TestBindingLoadFailure', function (assert) {
+    expect(2);
+
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+    $('#qunit-fixture').append("<script type='text/html' id='errorTemplate'>ERROR TEMPLATE CONTENT</script>");
+    $('#qunit-fixture').append("<div id='router' data-bind='routeTemplate: $data'></div>");
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1' },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'should-not-exist.html' },
+            { name: 'view2', model: TestModel, templateID: 'template1' }
+        ],
+        errorTemplateID: 'errorTemplate',
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    ko.applyBindings(router, $('#router')[0]);
+    
+    window.setTimeout(function () {
+        assert.strictEqual($('#router').text(), 'FooBar');
+        router.navigate('/view1');
+        window.setTimeout(function () {
+            assert.strictEqual($('#router').text(), 'ERROR TEMPLATE CONTENT');
+            QUnit.start();
+        });
+    }, 1);
+});
+
+QUnit.asyncTest('TestObservableView', function (assert) {
     expect(5);
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
@@ -988,28 +1083,36 @@ QUnit.test('TestObservableView', function (assert) {
 
     router.init();
 
-    var lastView;
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().name, 'home', 'router should be at home view');
 
-    assert.strictEqual(router.view().name, 'home', 'router should be at home view');
+        var lastView;
+        router.view.subscribe(function (view) {
+            lastView = view;
+        });
+        assert.equal(lastView, null);
 
-    router.view.subscribe(function(view){
-        lastView = view;
-    });
+        router.pathProvider.fakeChange('view1');
+        window.setTimeout(function () {
+            assert.strictEqual(lastView.name, 'view1');
 
-    assert.equal(lastView, null);
+            router.pathProvider.fakeChange('view2');
+            window.setTimeout(function () {
+                assert.strictEqual(lastView.name, 'view2');
 
-    router.pathProvider.fakeChange('view1');
-    assert.strictEqual(lastView.name, 'view1');
-
-    router.pathProvider.fakeChange('view2');
-    assert.strictEqual(lastView.name, 'view2');
-
-    lastView = null;
-    router.setTemplate('template2');
-    assert.strictEqual(lastView.activeTemplateID, 'template2');
+                lastView = null;
+                router.setTemplate('template2');
+                window.setTimeout(function () {
+                    assert.strictEqual(lastView.activeTemplateID, 'template2');
+                    
+                    QUnit.start();
+                }, 1);                
+            }, 1);
+        }, 1);
+    }, 1);
 });
 
-QUnit.test('TestBinding', function (assert) {
+QUnit.asyncTest('TestBinding', function (assert) {
     var fixture = $('#qunit-fixture');    
 
     fixture.append('<div id="content" data-bind="routeTemplate: router"></div>');
@@ -1036,19 +1139,30 @@ QUnit.test('TestBinding', function (assert) {
     };
 
     ko.applyBindings(model, fixture[0]);
-    assert.strictEqual(contentElement.innerHTML, 'Template1Content');
 
-    model.router.pathProvider.fakeChange('view1');
-    assert.strictEqual(contentElement.innerHTML, 'Template2Content');
+    window.setTimeout(function () {
+        assert.strictEqual(contentElement.innerHTML, 'Template1Content');
 
-    model.router.pathProvider.fakeChange('view2');
-    assert.strictEqual(contentElement.innerHTML, 'Template3Content');
+        model.router.pathProvider.fakeChange('view1');
+        window.setTimeout(function () {
+            assert.strictEqual(contentElement.innerHTML, 'Template2Content');
 
-    model.router.setTemplate('template1');
-    assert.strictEqual(contentElement.innerHTML, 'Template1Content', 'switching to template 1 without path change');
+            model.router.pathProvider.fakeChange('view2');
+            window.setTimeout(function () {
+                assert.strictEqual(contentElement.innerHTML, 'Template3Content');
+                
+                model.router.setTemplate('template1');
+                window.setTimeout(function () {
+                    assert.strictEqual(contentElement.innerHTML, 'Template1Content', 'switching to template 1 without path change');
+
+                    QUnit.start();
+                }, 1);                
+            }, 1);
+        }, 1);
+    }, 1);
 });
 
-QUnit.test('LoadingEvents', function (assert) {
+QUnit.asyncTest('LoadingEvents', function (assert) {
     expect(4);
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
@@ -1074,15 +1188,23 @@ QUnit.test('LoadingEvents', function (assert) {
     });
 
     router.init();
-        
-    assert.strictEqual(loadingHits, 1);
-    assert.strictEqual(loadedHits, 1);
-    
-    router.pathProvider.fakeChange('home/Justin');
-    router.pathProvider.fakeChange('view1/Bob');
 
-    assert.strictEqual(loadingHits, 2);
-    assert.strictEqual(loadedHits, 2);
+    window.setTimeout(function () {
+        assert.strictEqual(loadingHits, 1);
+        assert.strictEqual(loadedHits, 1)
+
+
+        router.pathProvider.fakeChange('home/Justin');
+        router.pathProvider.fakeChange('view1/Bob');
+
+        window.setTimeout(function () {
+
+            assert.strictEqual(loadingHits, 2);
+            assert.strictEqual(loadedHits, 2);
+
+            QUnit.start();
+        }, 1);
+    }, 1);       
 });
 
 QUnit.test('TestAddViews', function (assert) {
@@ -1118,7 +1240,7 @@ QUnit.test('TestAddViews', function (assert) {
 
 });
 
-QUnit.test('TestAddRoutes', function (assert) {
+QUnit.asyncTest('TestAddRoutes', function (assert) {
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
     var router = new ko.route.ViewRouter({
@@ -1153,8 +1275,6 @@ QUnit.test('TestAddRoutes', function (assert) {
         router.insertRoutes([]);
     });
 
-    assert.strictEqual(router.view().name, 'home');
-
     var router2 = new ko.route.ViewRouter({
         routes:[ 
             {
@@ -1180,8 +1300,11 @@ QUnit.test('TestAddRoutes', function (assert) {
 
     router2.init();
 
-    assert.strictEqual(router2.view().name, 'home0');
-
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().name, 'home');
+        assert.strictEqual(router2.view().name, 'home0');
+        QUnit.start();
+    }, 1);
 });
 
 QUnit.test('TestInitRoutes', function (assert) {
@@ -1243,7 +1366,7 @@ QUnit.test('TestClearRoutes', function (assert) {
 
 });
 
-QUnit.test('TestTemplateLoadUnload', function (assert) {
+QUnit.asyncTest('TestTemplateLoadUnload', function (assert) {
     expect(3);
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
@@ -1257,14 +1380,17 @@ QUnit.test('TestTemplateLoadUnload', function (assert) {
         ],
         pathProvider: new FakePathProvider(),
         templateProvider: {
-            loadTemplate: function(view, completeCallback){
+            loadTemplate: function(view){
                 currentTemplateID = view.templateID;
                 var response = {
                     success: true,
                     statusCode: 200,
                     template: $('#' + view.templateID)[0]
                 };
-                completeCallback(response);
+                
+                return new Promise(function (resolve) {
+                    resolve(response);
+                });
             },
             unloadTemplate: function(template){
                 assert.strictEqual(template, 'template1', 'template1 should be unloaded when template2 loads');
@@ -1274,9 +1400,15 @@ QUnit.test('TestTemplateLoadUnload', function (assert) {
 
     router.init();
 
-    assert.strictEqual(currentTemplateID, 'template1', 'template1 should have loaded');
-    router.pathProvider.fakeChange('view2');
-    assert.strictEqual(currentTemplateID, 'template2', 'template2 should have loaded');
+    window.setTimeout(function () {
+        assert.strictEqual(currentTemplateID, 'template1', 'template1 should have loaded');
+
+        router.pathProvider.fakeChange('view2');
+        window.setTimeout(function () {
+            assert.strictEqual(currentTemplateID, 'template2', 'template2 should have loaded');
+            QUnit.start();
+        }, 1);
+    }, 1);    
 });
 
 QUnit.asyncTest('TestAbortPrevious', function (assert) {
@@ -1321,12 +1453,13 @@ QUnit.asyncTest('TestAbortPrevious', function (assert) {
         })
     });
 
-    router.init();
-        
+    router.init();        
     assert.equal(router.view().name, null);
     
     router.navigate({ view: 'about' });
-    assert.strictEqual(router.view().activeTemplateID, 'aboutTemplate');
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().activeTemplateID, 'aboutTemplate');
+    },1);    
 
     window.setTimeout(function () {
         // should be aboutTemplate, because the navigate() above should have cancelled the original request

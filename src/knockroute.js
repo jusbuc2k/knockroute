@@ -1,5 +1,6 @@
 ﻿; (function (global, ko) {
-    
+    "use strict";
+
     var kr = {};
 
     function extendKo() {
@@ -37,7 +38,7 @@
         var count = 0;
         if (idx >= 0) {
             query = query.slice(idx + 1);
-        }      
+        }
 
         if (typeof (query) !== 'undefined') {
             var tokens = query.split('&');
@@ -58,7 +59,7 @@
         }
     }
 
-    kr.utils.serializeQueryString = function (nvc) {        
+    kr.utils.serializeQueryString = function (nvc) {
         var pairs = [];
         for (var key in nvc) {
             if (nvc.hasOwnProperty(key)) {
@@ -68,22 +69,28 @@
         return pairs.join('&');
     }
 
-    kr.utils.nowOrThen = function(result, success, fail) {
-        if (typeof result === 'boolean') {
-            if (result) {
-                success(true);
+    kr.utils.nowOrThen = function (result) {
+        return new Promise(function (resolve, reject) {
+            if (typeof result === 'boolean') {
+                if (result) {
+                    resolve(result);
+                } else {
+                    reject(result)
+                }
+            } else if (result != null && typeof result.done === 'function') {
+                result.done(function () {
+                    resolve(arguments);
+                }).fail(function () {
+                    reject(arguments);
+                });
+            } else if (result != null && typeof result.then === 'function') {
+                result.then(resolve, reject);
+            } else if (result != null) {
+                resolve(result);
             } else {
-                fail(false);
+                resolve();
             }
-        } else if (result != null && typeof result.done === 'function') {
-            result.done(success).fail(fail);
-        } else if (result != null && typeof result.then === 'function') {
-            result.then(success, fail);
-        } else if (result != null) {
-            success(result);
-        } else {
-            fail();
-        }
+        });       
     };
 
     kr.utils.attachEvent = function (element, event, handler) {
@@ -105,9 +112,27 @@
             throw 'No event subscription method available.';
         }
     };
-  
+
+    kr.utils.abortable = function (fn) {
+        var aborted = null;
+
+        function abortable() {
+            if (aborted) {
+                return Promise.reject(aborted);
+            } else {
+                return Promise.resolve(fn.apply(this, arguments));
+            }
+        }
+
+        abortable.abort = function (reason) {
+            aborted = reason;
+        };
+
+        return abortable;
+    };
+
     var routeConstraints = {
-        equals: function(test){
+        equals: function (test) {
             return function (value) {
                 return test === value;
             };
@@ -186,7 +211,7 @@
     HitCounter.prototype.abort = function () {
         this.state = 'aborted';
     };
-    
+
     //#endregion
 
     //#region pseudo-constants
@@ -242,12 +267,12 @@
                             parts: [{
                                 name: segParts[0][1],
                                 optional: true,
-                                type: 'params',                             
+                                type: 'params',
                                 dataType: 'string'
                             }]
                         });
                         optional = true;
-                    } else {                   
+                    } else {
                         routeSegments.push({
                             value: templateSegments[i],
                             parts: [{
@@ -259,7 +284,7 @@
                             }]
                         });
                     }
-                   
+
                     if (hasOptional && !optional) {
                         throw 'Invalid route template: A required segment cannot follow an optional one.';
                     }
@@ -273,7 +298,7 @@
                             { name: templateSegments[i], optional: false, type: 'literal' }
                         ]
                     });
-                } else if (templateSegments[i] === '*') {                    
+                } else if (templateSegments[i] === '*') {
                     routeSegments.push({
                         value: templateSegments[i],
                         parts: [
@@ -288,7 +313,7 @@
 
         return routeSegments;
     };
-        
+
     function Route(routeTemplate, options) {
         /// <param name="route" type="String"/>
         /// <param name="options" type="Object"/>
@@ -298,18 +323,18 @@
         };
 
         options = this.options = kr.utils.defaults(defaultOptions, options || {});
-               
+
         this.routeTemplate = routeTemplate;
         this.segments = Route.parseTemplate(routeTemplate, options.pathSeperator);
     }
-       
+
     Route.prototype.match = function (path, defaultValues) {
         /// <param name="path" type="String"/>
         /// <param name="defaultValues" type="Object"/>     
-        
+
         // This code is inspired by ASP.NET Routing from
         // https://github.com/aspnet/Routing/blob/dev/src/Microsoft.AspNet.Routing/Template/TemplateMatcher.cs
-        
+
         var pathSegments;
         var pathSegment;
         var routeSegment;
@@ -329,7 +354,7 @@
         }
 
         pathSegments = path.split(this.options.pathSeperator);
-                                        
+
         for (var i = 0; i < pathSegments.length; i++) {
             pathSegment = pathSegments[i];
             routeSegment = this.segments.length > i ? this.segments[i] : null;
@@ -345,8 +370,8 @@
                     if (part.name !== pathSegment) {
                         return null;
                     }
-                } else if (part.type === 'wildcard') {     
-                        // nothing to do if the wildcard is not the last position
+                } else if (part.type === 'wildcard') {
+                    // nothing to do if the wildcard is not the last position
                 } else if (part.type === 'parameter' && pathSegment.length > 0) {
                     if (part.constraint == null || part.constraint(pathSegment)) {
                         routeValues[part.name] = Route.parseSegmentValue(pathSegment, part.dataType);
@@ -366,7 +391,7 @@
                     // if the params is in the last position, we parse combine all remaining path segments into an array
 
                     routeValues[part.name] = pathSegments.slice(i);
-                    
+
                     // we are done processing segments
                     break;
                 } else {
@@ -377,48 +402,40 @@
                 throw 'Multi-part route segments are not implemented';
             }
         }
-        
+
         // We've matched the request path so far, but still have remaining route segments. These need
         // to be all single-part parameter segments with default values or else they won't match
         // because the path has no remaining segments
-        for (var i = pathSegments.length; i < this.segments.length; i++)
-        {
+        for (var i = pathSegments.length; i < this.segments.length; i++) {
             routeSegment = this.segments[i];
-            if (routeSegment.parts.length > 1)
-            {
+            if (routeSegment.parts.length > 1) {
                 // If it has more than one part it must contain literals, so it can't match.
                 return null;
             }
 
             var part = routeSegment.parts[0];
             // again, a literal can't match, s
-            if (part.type === 'literal')
-            {
+            if (part.type === 'literal') {
                 return null;
             }
 
             // It's ok for a catch-all to produce a null value
             var defaultValue;
-            if ((defaultValues && (defaultValue = defaultValues[part.name])) || part.type === 'wildcard')
-            {
+            if ((defaultValues && (defaultValue = defaultValues[part.name])) || part.type === 'wildcard') {
                 routeValues[part.name] = defaultValue;
             }
-            else if (part.optional)
-            {
+            else if (part.optional) {
                 // This is optional (with no default value) - there's nothing to capture here, so just move on.
             }
-            else
-            {
+            else {
                 // There's no default for this (non-catch-all) parameter so it can't match.
                 return null;
             }
         }
 
         // Copy all remaining default values to the route data
-        if (defaultValues != null)
-        {
-            for (var key in defaultValues)
-            {
+        if (defaultValues != null) {
+            for (var key in defaultValues) {
                 if (defaultValues.hasOwnProperty(key) && !routeValues.hasOwnProperty(key)) {
                     routeValues[key] = defaultValues[key];
                 }
@@ -527,7 +544,7 @@
     kr.Route = Route;
 
     //#endregion
-        
+
     //#region Default Providers
 
     function HashPathStringProvider() {
@@ -535,7 +552,7 @@
         var lastPath = '';
 
         self.pathChanged = new ko.subscribable();
-                        
+
         self.setPath = function (path) {
             if (path) {
                 window.location.hash = self.decorate(path);
@@ -557,12 +574,12 @@
                 return '#/' + path.slice(1);
             } else {
                 return '#/' + path;
-            }            
+            }
         };
 
         self.start = function () {
             // subscribe to the hashchange event if useRouteValues
-            kr.utils.attachEvent(window, 'hashchange', hashChanged);            
+            kr.utils.attachEvent(window, 'hashchange', hashChanged);
             hashChanged();
         };
 
@@ -577,7 +594,7 @@
                 window.setTimeout(callback, 20);
             }
         };
-               
+
         function hashChanged() {
             var path = self.getPath();
             self.pathChanged.notifySubscribers(path);
@@ -586,7 +603,7 @@
     }
 
     kr.HashPathStringProvider = HashPathStringProvider;
-   
+
     function HistoryPathStringProvider(options) {
         var self = this;
         var lastPath = '';
@@ -620,7 +637,7 @@
 
         self.stop = function () {
             // subscribe to the hashchange event if useRouteValues
-            kr.utils.detachEvent(window, 'popstate', handlePopState);            
+            kr.utils.detachEvent(window, 'popstate', handlePopState);
         };
 
         self.revert = function (callback) {
@@ -635,7 +652,7 @@
                 return res[0];
             } else {
                 return '';
-            }            
+            }
         }
 
         function stripBase(path) {
@@ -647,7 +664,7 @@
                 return path;
             }
         }
-               
+
         function handlePopState() {
             var path = self.getPath();
             self.pathChanged.notifySubscribers(path);
@@ -661,12 +678,12 @@
         var self = this;
     }
 
-    DefaultModelFactory.prototype.createModel = function (constructor, args) {        
-        if (typeof constructor === 'function') {
-            function ViewModelWrapper() {
-                return constructor.apply(this, args);
-            }
+    DefaultModelFactory.prototype.createModel = function (constructor, args) {
+        function ViewModelWrapper() {
+            return constructor.apply(this, args);
+        }
 
+        if (typeof constructor === 'function') {
             ViewModelWrapper.prototype = constructor.prototype;
 
             return new ViewModelWrapper();
@@ -681,12 +698,12 @@
         var self = this;
     }
 
-    DefaultTemplateProvider.prototype.loadTemplate = function (view, completeCallback) {
+    DefaultTemplateProvider.prototype.loadTemplate = function (view) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block.</summary>
         ///<param name="view" type="kr.View">The View object</param>        
         ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>        
         var template = window.document.getElementById(view.templateID);
-        
+
         if (!template) {
             throw 'There is no element with id ' + view.templateID + '.';
         }
@@ -695,13 +712,13 @@
             throw 'The element with id ' + view.templateID + ' must be a <script> tag in order to use it as a template.';
         }
 
-        var response = {
-            success: true,
-            statusCode: 203,
-            template: template
-        };
-
-        completeCallback(response);
+        return new Promise(function (resolve, reject) {
+            resolve({
+                success: true,
+                statusCode: 203,
+                template: template
+            });
+        });
     };
 
     DefaultTemplateProvider.prototype.unloadTemplate = function (template) {
@@ -717,10 +734,11 @@
         //TODO: Should this do something? Should the DefaultTemplateProvider exist, or should it be none?
     };
 
+
     kr.DefaultTemplateProvider = DefaultTemplateProvider;
-    
+
     function AjaxTemplateProvider(options) {
-        
+
         var self = this;
 
         var defaultOptions = {
@@ -740,12 +758,13 @@
         }
     }
 
-    AjaxTemplateProvider.prototype.loadTemplate = function (view, completeCallback) {
+    AjaxTemplateProvider.prototype.loadTemplate = function (view) {
         ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source.</summary>
         ///<param name="view" type="kr.View">The View object</param>
         ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
         var template = window.document.getElementById(view.templateID);
         var templateContainer = this.options.templateContainer || window.document.body;
+        var self = this;
 
         if (this.options.createTemplates && !template && view.templateSrc) {
             template = window.document.createElement("script");
@@ -764,7 +783,7 @@
             throw "There is no template defined with id '" + view.templateID + "'";
         }
 
-        if (template.tagName.toLowerCase() !== 'script'){
+        if (template.tagName.toLowerCase() !== 'script') {
             throw 'The element with id ' + view.templateID + ' must be a <script> tag in order to use it as a template.';
         }
 
@@ -782,27 +801,28 @@
             template: template
         };
 
-        if (contentSrc && !contentLoaded) {
-            if (!this.options.cache) {
-                contentSrc += '?v=' + new Date().getTime().toString();
-            }
-
-            jQuery.get(contentSrc).done(function (content, status, ctx) {
-                template.text = content;
-                template.setAttribute("data-loaded", "true");
+        return new Promise(function (resolve, reject) {
+            if (contentSrc && !contentLoaded) {
+                if (!self.options.cache) {
+                    contentSrc += '?v=' + new Date().getTime().toString();
+                }
+                jQuery.get(contentSrc).done(function (content, status, ctx) {
+                    template.text = content;
+                    template.setAttribute("data-loaded", "true");
+                    response.success = true;
+                    response.statusCode = ctx.status;
+                    resolve(response);
+                }).fail(function (ctx, status, statusText) {
+                    response.success = false;
+                    response.statusCode = ctx.status;
+                    reject(response);
+                });
+            } else {
                 response.success = true;
-                response.statusCode = ctx.status;
-                completeCallback(response);
-            }).fail(function (ctx, status, statusText) {
-                response.success = false;
-                response.statusCode = ctx.status;
-                completeCallback(response);
-            });
-        } else {
-            response.success = true;
-            response.statusCode = 203;
-            completeCallback(response);
-        }
+                response.statusCode = 203;
+                resolve(response);
+            }
+        });
     };
 
     AjaxTemplateProvider.prototype.unloadTemplate = function (template) {
@@ -814,7 +834,7 @@
         /// <summary>Unloads a template specified by the given HTML element.</summary>
         /// <param name="template" type="HTMLScriptElement">A string.</param>       
         /// </signature>
-                                
+
         if (typeof template === 'string') {
             template = window.document.getElementById(template);
         }
@@ -828,7 +848,7 @@
             return;
         }
 
-        template.setAttribute("data-loaded","false");
+        template.setAttribute("data-loaded", "false");
         template.text = '';
     };
 
@@ -844,7 +864,7 @@
         var self = this;
 
         this.name = name;
-        this.bus = ko.subscribable();                
+        this.bus = ko.subscribable();
     }
 
     kr.Channel = Channel;
@@ -867,7 +887,7 @@
         ko.utils.extend(self, kr.utils.defaults(defaultProps, attributes || {}));
     }
 
-    Area.prototype.getView = function (name) {        
+    Area.prototype.getView = function (name) {
         return ko.utils.arrayFirst(this.views, function (view) {
             return view.name === name;
         });
@@ -903,69 +923,18 @@
             templateSrc: null,
             templatePersist: false,
             singleton: false,
+            errorContent: null
         };
 
         ko.utils.extend(self, kr.utils.defaults(defaultProps, attributes || {}));
     }
 
-    View.prototype.executeAction = function(action, routeValues, successCallback, failCallback) {
-        var self = this;
-        if (this.modelInstance && typeof this.modelInstance[action] === 'function') {
-            kr.utils.nowOrThen(this.modelInstance[action].call(this.modelInstance, routeValues), function () {
-                if (typeof successCallback === 'function') {
-                    successCallback();
-                }
-            }, function () {
-                if (typeof failCallback === 'function') {
-                    failCallback();
-                }
-            });
-        } else {
-            if (typeof failCallback === 'function') {
-                failCallback();
-            }
-        }
-    };
-
-    View.prototype.unloadModel = function (force, callback) {
-        var self = this;
-        var cancel = false;
-
-        var e = {
-            cancel: function () {
-                cancel = true;
-            }
-        };
-
-        function done() {
-            if (cancel && !force) {
-                callback(true);
-                return;
-            }
-
-            if (force || !self.singleton) {
-                if (self.modelInstance != null && typeof self.modelInstance.dispose === 'function') {
-                    self.modelInstance.dispose();
-                }
-                self.modelInstance = null;                
-            }
-
-            callback(false);
-        }
-
-        if (this.modelInstance != null && typeof this.modelInstance.unload === 'function') {  
-            kr.utils.nowOrThen(this.modelInstance.unload(e), done, done);
-        } else {
-            done();
-        }
-    };
-        
     kr.View = View;
 
     //#endregion
-    
+
     //#region View Router
-              
+
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
         /// <param name="options" type="Object">A set of options.</param>
@@ -973,59 +942,123 @@
         /// <field name='pathProvider'>Gets or sets the path provider, which is responsible for watching, getting, and setting the current path portion of the URL.</field>
         /// <field name='templateProvider'>Gets or sets the template provider, which is responsible for loading and unloading templates.</field>
         /// <field name='modelFactory'>Gets or sets the model factory which is responsible for creating instances of view models.</field>        
-                        
+
         var self = this;
-                
+
         var defaultOptions = {
             routes: [
                 {
                     template: '{view}/{id?}',
-                    defaults: { view: 'home' },
+                    defaults: { view: 'home' }
                 }
             ],
             viewRouteKey: 'view',
-            areaRouteKey: 'area',            
+            areaRouteKey: 'area',
             loadMethodName: 'load',
             updateMethodName: 'update',
             areas: [],
             views: [],
+            templates: [],
             pathProvider: 'hash',
-            templateProvider: 'default'
+            templateProvider: 'default',
+            errorTemplateID: '',
+            notFoundTemplateID: '',
+            errorModel: null
         };
 
         options = kr.utils.defaults(defaultOptions, options || {});
 
         var initialized = false;
+        var routesInitialized = false;
         var defaultView = new kr.View('', null, '', null, false);
+        
         var routes = [];
         var areas = [];
         var views = [];
+        var templates = [];
         var pathChangedEvent;
-        var redirectSetTemplate = null;
-        var setCurrentCounter;
-        
+        var aborter = null;
+
         //#region Privates
 
         var currentView = ko.observable(defaultView);
+       
+        function executeModelAction(view, actionName, routeValues) {
+            var p;
+            var newTemplateID = view.templateID;
+            var newTemplate;
+            var canSetTemplate = true;
+
+            var actionContext = {
+                cancel: function () {
+
+                },
+                setTemplate: function (templateID) {
+                    if (canSetTemplate) {
+                        newTemplateID = templateID;
+                    } else {
+                        throw 'Template cannot be set at this time.';
+                    }
+                }
+            };
+
+            if (view.modelInstance && typeof view.modelInstance[actionName] === 'function') {
+                p = Promise.resolve(view.modelInstance[actionName].apply(view.modelInstance, [routeValues, actionContext]));                
+            } else {
+                p = Promise.resolve(null);
+            }
+                        
+            canSetTemplate = false;
+            newTemplate = self.getTemplate(newTemplateID, view);
+
+            //if (newTemplate == null && newTemplateID === view.templateID) {
+            //    newTemplate = view;
+            //} else if (newTemplate == null) {
+            //    return Promise.reject('The template with id ' + newTemplateID + ' does not exist');
+            //}
+
+            return Promise.all([p,
+                self.templateProvider.loadTemplate(newTemplate).then(function (response) {
+                    view.activeTemplateID = newTemplateID;
+                })
+            ]);
+        }
+
+        function executeModelUnload(view, force) {
+            function dispose() {
+                if (force || !view.singleton) {
+                    if (view.modelInstance != null && typeof view.modelInstance.dispose === 'function') {
+                        view.modelInstance.dispose.apply(view.modelInstance);
+                    }
+                    view.modelInstance = null;
+                }
+            }
+
+            if (view.modelInstance != null && typeof view.modelInstance.unload === 'function') {
+                return Promise.resolve(view.modelInstance.unload.apply(view.modelInstance, [force])).then(dispose);
+            } else {
+                dispose();
+                return Promise.resolve(true);
+            }
+        }
 
         function setCurrent(view, routeValues, cancel) {
             var model;
+            var waits = [];
 
-            if (typeof setCurrentCounter !== 'undefined') {
-                setCurrentCounter.abort();
+            if (aborter) {
+                aborter.abort('abort');
             }
+            
+            aborter = kr.utils.abortable(function () {
+                currentView(view);
+                aborter = null;
+                self.onLoaded.notifySubscribers({ routeValues: routeValues, context: this });
+            });
 
-            setCurrentCounter = new HitCounter(2);            
             model = view.modelInstance || view.model || {};
-            //var channel = channels[view.channel];
 
             self.onLoading.notifySubscribers({ routeValues: routeValues, context: this });
-
-            setCurrentCounter.then(function () {
-                currentView(view);
-                currentView().activeTemplateID = view.templateID;
-                self.onLoaded.notifySubscribers({ routeValues: routeValues, context: this});                
-            });
 
             if (typeof model === 'function') {
                 view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
@@ -1033,54 +1066,42 @@
                 view.modelInstance = model;
             }
 
-            //TODO This whole thing needs some work in regards to activeTemplateID.
-            // should activeTemplateID survive another action invocation, or should the templateID always
-            // be restored? I'm thinking the later, since it would require the action to call 'setTemplate'
-            // on some kind of yet-to-be-designed argument to the action method (or load)            
-            // self.templateProvider.loadTemplate() also needs to be applied in redirectSetTemplate
-
             // If the view is changing, we need to unload the existing model, unload the existing template, and load the new template
-            if (view !== currentView()) {                
-                currentView().unloadModel(false, function (shouldCancel) {
-                    if (shouldCancel) {
-                        cancel();                
-                    } else {
-                        if (currentView().activeTemplateID && currentView().activeTemplateID !== view.templateID)
-                        {
-                            self.templateProvider.unloadTemplate(currentView().activeTemplateID);
-                            currentView().activeTemplateID = null;                                   
-                        }
+            waits.push(executeModelUnload(currentView(), false).then(function (result) {
+                if (result === false) {
+                    cancel();
+                }
+                if (currentView().activeTemplateID && currentView().activeTemplateID !== view.templateID) {
+                    self.templateProvider.unloadTemplate(currentView().activeTemplateID);
+                    currentView().activeTemplateID = null;
+                }
+            }));
 
-                        self.templateProvider.loadTemplate(view, function (response) {
-                            view.activeTemplateID = view.templateID;
-                            if (response.success) {
-                                setCurrentCounter.hit();
-                            } else {
-                                self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: null });
-                                throw "The template for view '" + view.name + "' failed to load with status " + response.statusCode + ".";
-                            }
-                        });
+            waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function (result) {
+                executeModelAction(view, options.updateMethodName, routeValues);
+            }));
+
+            return Promise.all(waits)
+                .then(aborter)
+                .catch(function (reason) {
+                    aborter = null;                    
+                    if (reason !== 'abort') {                        
+                        handleError('Error', options.errorTemplateID, reason, routeValues);
                     }
-                });
+                }
+            );
+        }
+
+        function loadTemplate(templateOrView) {
+            var tmpl;
+
+            if (typeof templateOrView === 'string') {
+                tmpl = self.getTemplate(templateOrView);
             } else {
-                setCurrentCounter.hit();
+                tmpl = templateOrView;
             }
 
-            //JB: this won't work anyway, because loadTemplate has already been called at this point.            
-            //redirectSetTemplate = function (templateID) {
-            //    view.activeTemplateID = templateID;
-            //};
-                        
-            view.executeAction(options.loadMethodName, routeValues, function (result) {
-                redirectSetTemplate = null;
-                setCurrentCounter.hit();                
-            }, function () {
-                self.onLoadError.notifySubscribers({ routeValues: routeValues, context: this, data: arguments });
-            });
-
-            setCurrentCounter.then(function () {
-                view.executeAction(options.updateMethodName, routeValues);
-            });
+            return self.templateProvider.loadTemplate(tmpl);
         }
 
         function getMatchingViewAndRouteValues(path) {
@@ -1131,30 +1152,72 @@
 
             qs = kr.utils.parseQueryString(path);
             rv = kr.utils.defaults(qs, rv);
-                        
+
             result.routeValues = rv;
 
             return result;
         }
-        
+
+        function handleError(name, errorTemplateID, reason, routeValues) {
+            var errorView = {
+                name: name,
+                modelInstance: {
+                    routeValues: routeValues,
+                    error: reason
+                },
+                errorContent: null
+            };
+            var errorTemplate;            
+            var errorArgs = { routeValues: routeValues, context: this, error: reason, errorHandled: false };
+
+            self.onLoadError.notifySubscribers(errorArgs);
+                        
+            if (!errorArgs.errorHandled && errorTemplateID) {
+                errorTemplate = self.getTemplate(errorTemplateID, {
+                    templateID: errorTemplateID
+                });
+
+                if (typeof options.errorModel === 'function') {
+                    errorView.modelInstance = new options.errorModel(routeValues, reason);
+                }
+
+                loadTemplate(errorTemplate).then(function () {
+                    errorView.activeTemplateID = errorTemplate.templateID;
+                    currentView(errorView);
+                }, function (reason) {
+                    errorView.errorContent = 'Failed to load the error template.';
+                    currentView(errorView);
+                    //throw 'Failed to load the error template. ' + reason;
+                });
+            } else if (!errorArgs.errorHandled) {
+                errorView.errorContent = 'An error occurred while loading the view.';
+                currentView(errorView);
+            }
+        }
+
         function onPathChanged(path) {
             /// <param name="path" type="String"></param>
             var ctx = getMatchingViewAndRouteValues(path);
-            
+            var view;
+
             if (ctx == null) {
-                //TODO: make this not suck
-                // This is roughly the equivalent of a 404, because it means the area/view is not found
-                // or the route does not match
-                throw 'No route values available.';
+                if (options.notFoundTemplateID) {
+                    handleError('NotFound', options.notFoundTemplateID, 'Path not found');
+                } else {
+                    throw 'Path not found';
+                }
             }
 
             if (ctx.view == null) {
-                //TODO: make this not suck
-                throw 'No view available.';
+                if (options.notFoundTemplateID) {
+                    handleError('ViewNotFound', options.notFoundTemplateID, 'View not found', ctx.routeValues);
+                } else {
+                    throw 'View not found';
+                }
             }
 
             if (ctx.view === currentView()) {
-                ctx.view.executeAction(options.updateMethodName, ctx.routeValues);
+                executeModelAction(ctx.view, options.updateMethodName, ctx.routeValues);                
             } else {
                 setCurrent(ctx.view, ctx.routeValues, function () {
                     self.pathProvider.stop();
@@ -1164,7 +1227,7 @@
                 });
             }
         }
-        
+
         //TODO: Premature optmization here, see if we need it later
         //
         //function buildIndex() {
@@ -1180,13 +1243,13 @@
         //        viewIndex[views[i].name] = views[i];
         //    }            
         //}
-               
+
         //#endregion
 
         //#region public properties
-                
+
         self.pathProvider = new kr.HashPathStringProvider();
-                                        
+
         self.templateProvider = new kr.DefaultTemplateProvider();
 
         self.modelFactory = new DefaultModelFactory();
@@ -1228,6 +1291,8 @@
             /// <returns type="kr.View" />
             /// </signature>
 
+            var area;
+
             if (arguments.length === 1) {
                 return ko.utils.arrayFirst(views, function (view) {
                     return view.name === name;
@@ -1243,16 +1308,27 @@
             }
         };
 
+        self.getTemplate = function (templateID, defaultValue) {
+            var tmpl = ko.utils.arrayFirst(templates, function (template) {
+                return template.templateID === templateID;
+            });
+            if (tmpl) {
+                return tmpl;
+            } else {
+                return defaultValue;
+            }
+        };
+
         self.resolve = function (routeValues) {
             var currentPath = self.pathProvider.getPath();
             var path = '';
             var nvc = {};
-            var hasQuery = false;            
+            var hasQuery = false;
             var tmp;
             var route;
             var defaults;
 
-            for (var i = 0; i < routes.length; i++){
+            for (var i = 0; i < routes.length; i++) {
                 if (tmp = routes[i].route.resolve(routeValues, currentPath)) {
                     route = routes[i].route;
                     defaults = routes[i].defaults;
@@ -1264,7 +1340,7 @@
                     break;
                 }
             }
-            
+
             if (route == null) {
                 throw 'No matching route for current path.';
             }
@@ -1276,9 +1352,9 @@
                 if (routeValues.hasOwnProperty(key) && !route.hasKey(key)) {
                     nvc[key] = routeValues[key];
                     hasQuery = true;
-                }                
+                }
             }
-                        
+
             kr.utils.defaults(defaults, routeValues);
 
             path += route.resolve(routeValues, currentPath);
@@ -1315,7 +1391,7 @@
                 throw 'No matching route or path exists.';
             }
         }
-        
+
         self.setTemplate = function (templateID) {
             if (typeof redirectSetTemplate === 'function') {
                 redirectSetTemplate(templateID);
@@ -1349,9 +1425,9 @@
                 throw 'Routes cannot be added once the router is initalized';
             }
             var i;
-            if (insertedRoutes && insertedRoutes.length) {                
+            if (insertedRoutes && insertedRoutes.length) {
                 for (i = 0; i < insertedRoutes.length; i++) {
-                    options.routes.splice(0, 0, insertedRoutes[i]);                    
+                    options.routes.splice(0, 0, insertedRoutes[i]);
                 }
             }
         };
@@ -1363,7 +1439,7 @@
                 throw 'Routes cannot be added once the router is initalized';
             }
             var i;
-            if (addedRoutes && addedRoutes.length) {                
+            if (addedRoutes && addedRoutes.length) {
                 for (i = 0; i < addedRoutes.length; i++) {
                     options.routes.push(addedRoutes[i]);
                 }
@@ -1392,7 +1468,16 @@
 
             kr.utils.clearArray(options.routes);
         };
-                
+
+        self.destroy = function () {
+            self.pathProvider.stop();            
+            kr.utils.clearArray(routes);
+            kr.utils.clearArray(areas);
+            kr.utils.clearArray(views);
+            kr.utils.clearArray(templates);
+            currentView(defaultView);
+        };
+
         self.init = init;
 
         self.initRoutes = initRoutes;
@@ -1400,13 +1485,13 @@
         //#endregion
 
         //#region Public observables
-             
+
         self.view = ko.computed(function () {
             return currentView();
         });
 
         self.onLoading = new ko.subscribable();
-                        
+
         self.onLoaded = new ko.subscribable();
 
         self.onLoadError = new ko.subscribable();
@@ -1457,31 +1542,37 @@
                     });
                 }
             }
-            
+
             routesInitialized = true;
         }
 
-        function init() {            
+        function init() {
             if (initialized) {
                 return;
             }
+            var v;
+            var area;
+            var i;
 
             self.pathProvider.stop();
-                        
+
             initRoutes();
 
             // add all the views used in the constructor
-            if (options.views && options.views.length) {               
-                kr.utils.clearArray(views);
-                var v;
-                var area;
-                var i;
-
+            if (options.views && options.views.length) {
+                kr.utils.clearArray(views);            
                 for (i = 0; i < options.views.length; i++) {
                     addView(options.views[i]);
                 }
             } else {
                 throw 'ViewRouter could not be initialized because no views are defined.';
+            }
+
+            if (options.templates && options.templates.length) {
+                kr.utils.clearArray(templates);
+                for (i = 0; i < options.templates.length; i++) {
+                    templates.push(options.templates[i]);
+                }
             }
 
             // begin watching for path changes
@@ -1494,7 +1585,8 @@
 
         function addView(view) {
             var v;
-                        
+            var area;
+
             //TODO: Is there really a use case for passing in a kr.View() vs. an anonymous obj?                    
             if (view instanceof kr.View) {
                 v = view;
@@ -1533,7 +1625,7 @@
         } else if (options.pathProvider === 'history') {
             self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
         }
-              
+
         //#endregion
     }
 
@@ -1549,23 +1641,39 @@
             });
             var router = ko.utils.unwrapObservable(valueAccessor());
 
-            router.view.subscribe(function (updatedView) {
+            var computed = ko.computed(function () {
+                var updatedView = router.view();
+                var tmpl;
                 var bindingValue = function () {
-                    return {
-                        data: updatedView.modelInstance,
-                        name: updatedView.activeTemplateID || updatedView.templateID
-                    };
+                    return tmpl;
+                };
+
+                if (!updatedView) {
+                    ko.utils.setHtml(element, '<h2>Error</h2><p>Something went wrong when trying to display content.</p>');
+                    return;
+                } else if (updatedView.errorContent) {
+                    ko.utils.setHtml(element, '<h2>Error</h2><p>' + updatedView.errorContent + '</p>');
+                    return;
+                }
+
+                tmpl = {
+                    data: updatedView.modelInstance,
+                    name: updatedView.activeTemplateID || updatedView.templateID
                 };
 
                 ko.bindingHandlers.template.update(element, bindingValue, allBindings, viewModel, bindingContext);
             });
 
             router.init();
-            
+
+            ko.utils.domNodeDisposal.addDisposeCallback(element, function () {
+                computed.dispose();
+            });
+
             return result;
         },
         'update': function (element, valueAccessor, allBindings, viewModel, bindingContext) {
-          
+
         }
     };
     //#endregion
