@@ -3,21 +3,26 @@
     <title>KnockRoute Example 1</title>
 </head>
 <body>
-    <div data-bind="router: router"></div>
-    <script src="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js"></script>
+    <div data-bind="routeTemplate: router"></div>
+    <script src="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.debug.js"></script>
     <script src="../src/knockroute.js"></script>
     <script src="data.js"></script>
 
     <script type="text/html" id="listTemplate">
         <h1>KnockRoute Example 1</h1>
         <h2>List of Persons</h2>
+        <p>
+            <a href="#/foobar">This should trigger a ViewNotFound</a>
+            <a href="#/foobar/test/blah/foo">This should trigger a NotFound</a>
+            <a href="#/home/?error=123">This should throw an error.</a>
+        </p>
         <ul data-bind="foreach: list">
             <li>
                 <span data-bind="text: firstName"></span>
                 <span data-bind="text: lastName"></span>
-                <a href="#" data-bind="attr: {href: '#/detail/view/'+personID}">View</a>
+                <a href="#" data-bind="attr: {href: '#/detail/'+personID}">View</a>
             </li>
-        </ul>
+        </ul>        
     </script>
 
     <script type="text/html" id="detailTemplate">
@@ -49,7 +54,7 @@
         </ul>
 
         <p>
-            <a href="#" data-bind="attr: { href: '#/detail/edit/' + personID()}">Edit</a>
+            <a href="#" data-bind="attr: { href: editUrl }">Edit</a>
             <a href="#/home/">Back to List</a>
         </p>
     </script>
@@ -84,8 +89,22 @@
 
         <p>
             <a href="#" data-bind="click: save">Save</a>
-            <a href="#" data-bind="attr: { href: '#/detail/detail/' + personID()}">Cancel</a>
+            <a href="#" data-bind="attr: { href: '#/detail/' + personID()}">Cancel</a>
         </p>
+    </script>
+
+    <script id="notFoundTemplate" type="text/html">
+        <h1>Not Found</h1>
+        <p>The path was not found.</p>
+        <p>This template is displayed when the URL does not match a defined route or view.</p>
+        <pre data-bind="text: JSON.stringify($data)"></pre>
+    </script>
+
+    <script id="errorTemplate" type="text/html">
+        <h1>Error!</h1>
+        <p>Something broke</p>
+        <p>This template is displayed when an error happens.</p>
+        <pre data-bind="text: JSON.stringify($data)"></pre>
     </script>
 
     <script>
@@ -113,12 +132,14 @@
                     { name: 'home', model: ListModel, templateID: 'listTemplate' },
                     { name: 'detail', model: DetailModel, templateID: 'detailTemplate' }
                 ],
-                defaultRoutes: [
+                routes: [
                    {
-                       template: '{view}/{action?}/{id:int?}',
-                       defaults: { view: 'home', action: 'index' },
+                       template: '{view}/{id:int?}/{action?}',
+                       defaults: { view: 'home' },
                    }
                 ],
+                notFoundTemplateID: 'notFoundTemplate',
+                errorTemplateID: 'errorTemplate'
             });
         }
 
@@ -126,37 +147,50 @@
             var self = this;
             this.list = ko.observableArray(EXAMPLE_DATA);
 
-            this.load = function () {
+            this.load = function (routeValues) {                
                 return true;
+            };
+
+            this.update = function (routeValues) {
+                if (routeValues.error) {
+                    return new Promise(function (resolve, reject) {
+                        throw 'An error happened!';
+                    });
+                }
             };
         }
 
         function DetailModel(router) {
             var self = this;
+
             this.personID = ko.observable();
             this.firstName = ko.observable();
             this.lastName = ko.observable();
             this.company = ko.observable();
             this.email = ko.observable();
             this.phone = ko.observable();
+
+            this.editUrl = ko.computed(function () {
+                return router.resolve({ view: 'detail', id: self.personID(), action: 'edit' });
+            });
             
             self.save = function () {                                
                 exampleDataService.savePerson(self.personID(), ko.toJS(self));
 
-                router.navigate({ view: 'detail' });
+                router.navigate({ view: 'detail', action: 'view' });
             };
 
-            self.load = function (routeValues) {
-                if (routeValues.action === 'edit') {
-                    router.setTemplate('editTemplate');
-                } else {
-                    router.setTemplate('detailTemplate');
-                }
-
+            self.load = function (routeValues, actionContext) {
                 var person = exampleDataService.getPersonByID(routeValues.id);
+
                 if (person == null) {
                     return false;
                 }
+
+                if (routeValues.action === 'edit') {
+                    actionContext.setTemplate('editTemplate');
+                }
+
                 self.personID(person.personID);
                 self.lastName(person.lastName);
                 self.firstName(person.firstName);
@@ -168,6 +202,12 @@
                 // If returning a promise, the view will only be loaded if the promise
                 // calls the success callback
                 return true;
+            };
+
+            self.update = function (routeValues, actionContext) {
+                if (routeValues.action === 'edit') {
+                    actionContext.setTemplate('editTemplate');
+                }
             };
         }
 

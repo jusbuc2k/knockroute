@@ -131,6 +131,24 @@
         return abortable;
     };
 
+    kr.utils.setTextContent = function (element, textContent) {
+        var value = ko.utils.unwrapObservable(textContent);
+        if ((value === null) || (value === undefined))
+            value = "";
+
+        // We need there to be exactly one child: a text node.
+        // If there are no children, more than one, or if it's not a text node,
+        // we'll clear everything and create a single text node.
+        var innerTextNode = ko.virtualElements.firstChild(element);
+        if (!innerTextNode || innerTextNode.nodeType != 3 || ko.virtualElements.nextSibling(innerTextNode)) {
+            ko.virtualElements.setDomNodeChildren(element, [document.createTextNode(value)]);
+        } else {
+            innerTextNode.data = value;
+        }
+
+        ko.utils.forceRefresh(element);
+    }
+
     var routeConstraints = {
         equals: function (test) {
             return function (value) {
@@ -919,7 +937,7 @@
             model: null,
             modelInstance: null,
             templateID: null,
-            activeTemplateID: null,
+            activeTemplateID: ko.observable(null),
             templateSrc: null,
             templatePersist: false,
             singleton: false,
@@ -963,6 +981,7 @@
             templateProvider: 'default',
             errorTemplateID: '',
             notFoundTemplateID: '',
+            defaultTemplateID: '',
             errorModel: null
         };
 
@@ -970,8 +989,10 @@
 
         var initialized = false;
         var routesInitialized = false;
-        var defaultView = new kr.View('', null, '', null, false);
-        
+        var defaultView = new kr.View({
+            name: null,
+            templateID: options.defaultTemplateID
+        });
         var routes = [];
         var areas = [];
         var views = [];
@@ -1007,8 +1028,12 @@
             } else {
                 p = Promise.resolve(null);
             }
-                        
+                 
+            // The template can only be set in the syncronus code of the 
+            // model action method (e.g. load or update), that is, before the method returns
+            // a promise or a value.
             canSetTemplate = false;
+
             newTemplate = self.getTemplate(newTemplateID, view);
 
             //if (newTemplate == null && newTemplateID === view.templateID) {
@@ -1019,7 +1044,7 @@
 
             return Promise.all([p,
                 self.templateProvider.loadTemplate(newTemplate).then(function (response) {
-                    view.activeTemplateID = newTemplateID;
+                    view.activeTemplateID(newTemplateID);
                 })
             ]);
         }
@@ -1066,20 +1091,27 @@
                 view.modelInstance = model;
             }
 
-            // If the view is changing, we need to unload the existing model, unload the existing template, and load the new template
-            waits.push(executeModelUnload(currentView(), false).then(function (result) {
-                if (result === false) {
-                    cancel();
-                }
-                if (currentView().activeTemplateID && currentView().activeTemplateID !== view.templateID) {
-                    self.templateProvider.unloadTemplate(currentView().activeTemplateID);
-                    currentView().activeTemplateID = null;
-                }
-            }));
+            try {
 
-            waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function (result) {
-                executeModelAction(view, options.updateMethodName, routeValues);
-            }));
+                // If the view is changing, we need to unload the existing model, unload the existing template, and load the new template
+                waits.push(executeModelUnload(currentView(), false).then(function (result) {
+                    if (result === false) {
+                        cancel();
+                    }
+                    if (currentView().activeTemplateID() && currentView().activeTemplateID() !== view.templateID) {
+                        self.templateProvider.unloadTemplate(currentView().activeTemplateID());
+                        //currentView().activeTemplateID(null);
+                    }
+                }));
+
+                waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function () {
+                    return executeModelAction(view, options.updateMethodName, routeValues);
+                }));
+
+            } catch (e) {
+                handleError('Error', options.errorTemplateID, e, routeValues);
+                return Promise.reject(e);
+            }
 
             return Promise.all(waits)
                 .then(aborter)
@@ -1159,14 +1191,15 @@
         }
 
         function handleError(name, errorTemplateID, reason, routeValues) {
-            var errorView = {
+            var errorView = new kr.View({
                 name: name,
                 modelInstance: {
+                    name: name,
                     routeValues: routeValues,
                     error: reason
                 },
                 errorContent: null
-            };
+            });
             var errorTemplate;            
             var errorArgs = { routeValues: routeValues, context: this, error: reason, errorHandled: false };
 
@@ -1182,7 +1215,7 @@
                 }
 
                 loadTemplate(errorTemplate).then(function () {
-                    errorView.activeTemplateID = errorTemplate.templateID;
+                    errorView.activeTemplateID(errorTemplate.templateID);
                     currentView(errorView);
                 }, function (reason) {
                     errorView.errorContent = 'Failed to load the error template.';
@@ -1203,21 +1236,16 @@
             if (ctx == null) {
                 if (options.notFoundTemplateID) {
                     handleError('NotFound', options.notFoundTemplateID, 'Path not found');
+                    return;
                 } else {
                     throw 'Path not found';
                 }
             }
 
-            if (ctx.view == null) {
-                if (options.notFoundTemplateID) {
-                    handleError('ViewNotFound', options.notFoundTemplateID, 'View not found', ctx.routeValues);
-                } else {
-                    throw 'View not found';
-                }
-            }
-
             if (ctx.view === currentView()) {
-                executeModelAction(ctx.view, options.updateMethodName, ctx.routeValues);                
+                executeModelAction(ctx.view, options.updateMethodName, ctx.routeValues).catch(function(reason){
+                    handleError('Error', options.errorTemplateID, reason, ctx.routeValues);
+                });                
             } else {
                 setCurrent(ctx.view, ctx.routeValues, function () {
                     self.pathProvider.stop();
@@ -1392,14 +1420,8 @@
             }
         }
 
-        self.setTemplate = function (templateID) {
-            if (typeof redirectSetTemplate === 'function') {
-                redirectSetTemplate(templateID);
-            } else {
-                currentView().activeTemplateID = templateID;
-                currentView.valueWillMutate();
-                currentView.valueHasMutated();
-            }
+        self.setTemplate = function (templateID) {            
+            currentView().activeTemplateID(templateID);
         };
 
         self.addViews = function (addedViews) {
@@ -1652,17 +1674,26 @@
                     ko.utils.setHtml(element, '<h2>Error</h2><p>Something went wrong when trying to display content.</p>');
                     return;
                 } else if (updatedView.errorContent) {
-                    ko.utils.setHtml(element, '<h2>Error</h2><p>' + updatedView.errorContent + '</p>');
+                    var stack = (updatedView.modelInstance && updatedView.modelInstance.error && updatedView.modelInstance.error.stack) ? updatedView.modelInstance.error.stack : null;
+                    ko.utils.setHtml(element, '<h2>Error</h2><p>' + updatedView.errorContent + '</p><p>' + stack + '</p>');
                     return;
                 }
 
                 tmpl = {
                     data: updatedView.modelInstance,
-                    name: updatedView.activeTemplateID || updatedView.templateID
+                    name: ko.unwrap(updatedView.activeTemplateID) || updatedView.templateID
                 };
 
-                ko.bindingHandlers.template.update(element, bindingValue, allBindings, viewModel, bindingContext);
-            });
+                if (tmpl.data && tmpl.name) {
+                    ko.bindingHandlers.template.update(element, bindingValue, allBindings, viewModel, bindingContext);
+                } else {
+                    if (ko.utils && ko.utils.setTextContent) {
+                        kr.utils.setTextContent(element, 'Loading...');
+                    } else if (element.innerHTML) {
+                        element.innerHTML = 'Loading...';
+                    }
+                }
+            }).extend({ rateLimit: 10 });
 
             router.init();
 

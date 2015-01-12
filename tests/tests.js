@@ -1099,11 +1099,10 @@ QUnit.asyncTest('TestObservableView', function (assert) {
             router.pathProvider.fakeChange('view2');
             window.setTimeout(function () {
                 assert.strictEqual(lastView.name, 'view2');
-
-                lastView = null;
+                                
                 router.setTemplate('template2');
                 window.setTimeout(function () {
-                    assert.strictEqual(lastView.activeTemplateID, 'template2');
+                    assert.strictEqual(lastView.activeTemplateID(), 'template2');
                     
                     QUnit.start();
                 }, 1);                
@@ -1453,18 +1452,22 @@ QUnit.asyncTest('TestAbortPrevious', function (assert) {
         })
     });
 
-    router.init();        
-    assert.equal(router.view().name, null);
-    
-    router.navigate({ view: 'about' });
-    window.setTimeout(function () {
-        assert.strictEqual(router.view().activeTemplateID, 'aboutTemplate');
-    },1);    
+    router.init();
 
-    window.setTimeout(function () {
-        // should be aboutTemplate, because the navigate() above should have cancelled the original request
-        // event though the load request for the home model completes after this.
-        assert.strictEqual(router.view().activeTemplateID, 'aboutTemplate');
-        QUnit.start();
-    }, 200);
+    window.setTimeout(function(){
+        assert.equal(router.view().name, null);
+
+        router.navigate({ view: 'about' });
+        window.setTimeout(function () {
+            assert.strictEqual(router.view().activeTemplateID(), 'aboutTemplate');
+        }, 1);
+
+        window.setTimeout(function () {
+            // should be aboutTemplate, because the navigate() above should have cancelled the original request
+            // event though the load request for the home model completes after this.
+            assert.strictEqual(router.view().activeTemplateID(), 'aboutTemplate');
+            QUnit.start();
+        }, 200);
+    },1);
+   
 });
