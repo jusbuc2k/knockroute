@@ -903,7 +903,8 @@ ES6Promise.polyfill();
         }
 
         // if the template is marked as persistent (data-persist), don't actually unload it.
-        if (isTrue(template, 'data-persist')) {
+        // or if the template does not have a source attribute (it's a static template)
+        if (isTrue(template, 'data-persist') || template.getAttribute('data-src') == null) {
             return;
         }
 
