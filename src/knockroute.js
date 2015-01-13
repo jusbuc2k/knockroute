@@ -132,22 +132,14 @@
     };
 
     kr.utils.setTextContent = function (element, textContent) {
-        var value = ko.utils.unwrapObservable(textContent);
-        if ((value === null) || (value === undefined))
-            value = "";
-
-        // We need there to be exactly one child: a text node.
-        // If there are no children, more than one, or if it's not a text node,
-        // we'll clear everything and create a single text node.
-        var innerTextNode = ko.virtualElements.firstChild(element);
-        if (!innerTextNode || innerTextNode.nodeType != 3 || ko.virtualElements.nextSibling(innerTextNode)) {
-            ko.virtualElements.setDomNodeChildren(element, [document.createTextNode(value)]);
-        } else {
-            innerTextNode.data = value;
+        if (element && typeof element.innerHTML !== 'undefined') {
+            element.innerHTML = textContent;
+        } else if (element && typeof element.textContent !== 'undefined') {
+            element.textContent = textContent;
+        } else if (element && typeof element.innerText !== 'undefined') {
+            element.innerText = textContent;
         }
-
-        ko.utils.forceRefresh(element);
-    }
+    };
 
     var routeConstraints = {
         equals: function (test) {
@@ -184,51 +176,6 @@
             return null;
         }
     }
-
-    // Sort of like a promise, but requires that hit() be called N number of times before then callbacks are fired.
-    function HitCounter(requiredCount, context) {
-        this.requiredCount = requiredCount;
-        this.hitCount = 0;
-        this.callbacks = [];
-        this.state = 'pending';
-        this.context = context;
-    }
-
-    HitCounter.prototype.hit = function () {
-        var i;
-        this.hitCount++;
-        if (this.hitCount >= this.requiredCount && this.state === 'pending') {
-            this.state = 'resolved';
-            for (i = 0; i < this.callbacks.length; i++) {
-                if (typeof this.callbacks[i][0] === 'function') {
-                    this.callbacks[i][0].call(this.context);
-                }
-            }
-        }
-    };
-
-    HitCounter.prototype.reject = function () {
-        var i;
-        for (i = 0; i < this.callbacks.length; i++) {
-            if (typeof this.callbacks[i][1] === 'function') {
-                this.callbacks[i][1].call(this.context);
-            }
-        }
-    };
-
-    HitCounter.prototype.then = function (successCallback, failCallback) {
-        if (this.state === 'pending') {
-            this.callbacks.push([successCallback, failCallback]);
-        } else if (this.state === 'resolved' && typeof successCallback === 'function') {
-            successCallback.call(this.context);
-        } else if (this.state === 'rejected' && typeof failCallback === 'function') {
-            failCallback.call(this.context);
-        }
-    };
-
-    HitCounter.prototype.abort = function () {
-        this.state = 'aborted';
-    };
 
     //#endregion
 
@@ -938,14 +885,15 @@
             model: null,
             modelInstance: null,
             templateID: null,
-            activeTemplateID: ko.observable(null),
+            activeTemplateID: null,
             templateSrc: null,
             templatePersist: false,
             singleton: false,
-            errorContent: null
+            content: null
         };
 
         ko.utils.extend(self, kr.utils.defaults(defaultProps, attributes || {}));
+        self.activeTemplateID = ko.observable(self.activeTemplateID);
     }
 
     kr.View = View;
@@ -983,7 +931,7 @@
             errorTemplateID: '',
             notFoundTemplateID: '',
             defaultTemplateID: '',
-            errorModel: null
+            defaultContent: 'Loading...'
         };
 
         options = kr.utils.defaults(defaultOptions, options || {});
@@ -992,7 +940,8 @@
         var routesInitialized = false;
         var defaultView = new kr.View({
             name: null,
-            templateID: options.defaultTemplateID
+            templateID: options.defaultTemplateID,
+            content: options.defaultContent
         });
         var routes = [];
         var areas = [];
@@ -1219,12 +1168,12 @@
                     errorView.activeTemplateID(errorTemplate.templateID);
                     currentView(errorView);
                 }, function (reason) {
-                    errorView.errorContent = 'Failed to load the error template.';
+                    errorView.content = 'Failed to load the error template.';
                     currentView(errorView);
                     //throw 'Failed to load the error template. ' + reason;
                 });
             } else if (!errorArgs.errorHandled) {
-                errorView.errorContent = 'An error occurred while loading the view.';
+                errorView.content = 'An error occurred while loading the view.';
                 currentView(errorView);
             }
         }
@@ -1664,7 +1613,7 @@
             });
             var router = ko.utils.unwrapObservable(valueAccessor());
 
-            var computed = ko.computed(function () {
+            ko.computed(function () {
                 var updatedView = router.view();
                 var tmpl;
                 var bindingValue = function () {
@@ -1672,11 +1621,13 @@
                 };
 
                 if (!updatedView) {
-                    ko.utils.setHtml(element, '<h2>Error</h2><p>Something went wrong when trying to display content.</p>');
+                    kr.utils.setTextContent(element, '<h2>Error</h2><p>Something went wrong when trying to display content.</p>');
                     return;
-                } else if (updatedView.errorContent) {
-                    var stack = (updatedView.modelInstance && updatedView.modelInstance.error && updatedView.modelInstance.error.stack) ? updatedView.modelInstance.error.stack : null;
-                    ko.utils.setHtml(element, '<h2>Error</h2><p>' + updatedView.errorContent + '</p><p>' + stack + '</p>');
+                } else if (updatedView.content && updatedView.modelInstance && updatedView.modelInstance.error) {
+                    kr.utils.setTextContent(element, '<h2>Error</h2><p>' + updatedView.content + '</p><p>' + (updatedView.modelInstance.error.stack) ? updatedView.modelInstance.error.stack : '' + '</p>');
+                    return;
+                } else if (updatedView.content) {
+                    kr.utils.setTextContent(element, updatedView.content);
                     return;
                 }
 
@@ -1688,24 +1639,18 @@
                 if (tmpl.data && tmpl.name) {
                     ko.bindingHandlers.template.update(element, bindingValue, allBindings, viewModel, bindingContext);
                 } else {
-                    if (ko.utils && ko.utils.setTextContent) {
-                        kr.utils.setTextContent(element, 'Loading...');
-                    } else if (element.innerHTML) {
-                        element.innerHTML = 'Loading...';
-                    }
+                    throw 'Failed to load view';
                 }
+            }, this, {
+                disposeWhenNodeIsRemoved: element
             }).extend({ rateLimit: 10 });
 
             router.init();
 
-            ko.utils.domNodeDisposal.addDisposeCallback(element, function () {
-                computed.dispose();
-            });
-
             return result;
         },
         'update': function (element, valueAccessor, allBindings, viewModel, bindingContext) {
-
+            // Nothing to do here I don't think
         }
     };
     //#endregion

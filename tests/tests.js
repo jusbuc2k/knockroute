@@ -120,6 +120,14 @@ QUnit.asyncTest('nowOrThen', function (assert) {
     });
 });
 
+QUnit.test('setTextContent', function (assert) {
+    expect(1);
+
+    ko.route.utils.setTextContent($('#qunit-fixture')[0], 'This is a test');
+
+    assert.strictEqual($('#qunit-fixture').text(), 'This is a test');    
+});
+
 QUnit.test('events', function (assert) {
     expect(1);
 
@@ -137,47 +145,6 @@ QUnit.test('events', function (assert) {
 });
 
 QUnit.module('View');
-
-//QUnit.test('ExecuteAction', function (assert) {
-//    expect(3);
-
-//    var tmp;
-//    var viewWithEmptyModel = new ko.route.View({
-//        name: 'test',
-//        area: null,
-//        model: {
-//            load: function(rv){
-//                tmp = rv.foo;
-//                return true;
-//            },
-//            bar: function (rv) {
-//                tmp = rv.foo;
-//                return true;
-//            }
-//        },
-//        modelInstance: null,
-//        templateID: 't123',
-//        activeTemplateID: null,
-//        templateSrc: null,
-//        singleton: false,
-//    });
-
-//    viewWithEmptyModel.modelInstance = viewWithEmptyModel.model;
-
-//    viewWithEmptyModel.executeAction('load', { foo: 'Hello World' }, function () {
-//        assert.strictEqual(tmp, 'Hello World');
-//    });
-
-//    viewWithEmptyModel.executeAction('bar', { foo: 'Hello Bar' }, function () {
-//        assert.strictEqual(tmp, 'Hello Bar');
-//    });
-
-//    viewWithEmptyModel.executeAction('nuts', { foo: 'Hello Bar' }, function () {
-//        assert.ok(false, 'this should not get hit');
-//    }, function() {
-//        assert.ok(true);
-//    });
-//});
 
 QUnit.module('Route');
 
@@ -535,7 +502,7 @@ QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
         assert.strictEqual(result.statusCode, 203);
         assert.strictEqual(result.template.text.indexOf('Bar'), 3);
         dtp.unloadTemplate('template1');
-        assert.strictEqual(result.template.text,'');
+        assert.strictEqual(result.template.text,'FooBar');
                                         
         dtp.loadTemplate({ templateID: 'template2' }).then(function (result) {
             assert.strictEqual(result.success, true);
@@ -1019,7 +986,7 @@ QUnit.asyncTest('TestModelOrTemplateLoadFailure', function (assert) {
     router.pathProvider.fakeChange('/view1/');
 
     window.setTimeout(function () {
-        assert.strictEqual(router.view().errorContent, 'An error occurred while loading the view.');
+        assert.strictEqual(router.view().content, 'An error occurred while loading the view.');
 
         router.pathProvider.fakeChange('/view2/?fail=123');
         window.setTimeout(function () {
@@ -1104,56 +1071,6 @@ QUnit.asyncTest('TestObservableView', function (assert) {
                 window.setTimeout(function () {
                     assert.strictEqual(lastView.activeTemplateID(), 'template2');
                     
-                    QUnit.start();
-                }, 1);                
-            }, 1);
-        }, 1);
-    }, 1);
-});
-
-QUnit.asyncTest('TestBinding', function (assert) {
-    var fixture = $('#qunit-fixture');    
-
-    fixture.append('<div id="content" data-bind="routeTemplate: router"></div>');
-    fixture.append("<script type='text/html' id='template1'>Template1Content</script>");
-    fixture.append("<script type='text/html' id='template2'>Template2Content</script>");
-    fixture.append("<script type='text/html' id='template3'>Template3Content</script>");
-
-    var contentElement = $('#content')[0];
-
-    expect(4);
-    
-    var model = {
-        router: new ko.route.ViewRouter({
-            views: [
-                { name: 'home', model: TestModel, templateID: 'template1' },
-                { name: 'view1', model: TestModel, templateID: 'template2' },
-                { name: 'view2', model: TestModel, templateID: 'template3' }
-            ],
-            pathProvider: new FakePathProvider(),
-            templateProvider: new FakeTemplateProvider({
-                templateContainer: fixture[0]
-            })
-        })
-    };
-
-    ko.applyBindings(model, fixture[0]);
-
-    window.setTimeout(function () {
-        assert.strictEqual(contentElement.innerHTML, 'Template1Content');
-
-        model.router.pathProvider.fakeChange('view1');
-        window.setTimeout(function () {
-            assert.strictEqual(contentElement.innerHTML, 'Template2Content');
-
-            model.router.pathProvider.fakeChange('view2');
-            window.setTimeout(function () {
-                assert.strictEqual(contentElement.innerHTML, 'Template3Content');
-                
-                model.router.setTemplate('template1');
-                window.setTimeout(function () {
-                    assert.strictEqual(contentElement.innerHTML, 'Template1Content', 'switching to template 1 without path change');
-
                     QUnit.start();
                 }, 1);                
             }, 1);
@@ -1470,4 +1387,57 @@ QUnit.asyncTest('TestAbortPrevious', function (assert) {
         }, 200);
     },1);
    
+});
+
+QUnit.module('Binding');
+
+QUnit.test('TestBinding', function (assert) {
+    var fixture = $('#qunit-fixture');
+    expect(5);
+
+    fixture.append('<div id="content" data-bind="routeTemplate: router"></div>');
+    fixture.append("<script type='text/html' id='template1'>Template1Content</script>");
+    fixture.append("<script type='text/html' id='template2'>Template2Content</script>");
+    fixture.append("<script type='text/html' id='template3'>Template3Content</script>");
+
+    var contentElement = $('#content')[0];
+    var $content = $('#content');
+    var initCalled = false;
+    var router = {
+        view: ko.observable(new ko.route.View({
+            content: 'Default Content'
+        })),
+        init: function () {
+            initCalled = true;
+        }
+    };
+    var bindingContext = {
+        createChildContext: function () {
+            // fake, do nothing
+        }
+    };
+
+    function value() {
+        return router;
+    };
+
+    ko.bindingHandlers.routeTemplate.init($content[0], value, {}, {}, bindingContext);
+    assert.strictEqual(initCalled, true);
+    assert.strictEqual($content.text(), 'Default Content');
+
+    router.view(new ko.route.View({
+        name: 'test',
+        activeTemplateID: 'template1',
+        modelInstance: {}
+    }));
+    assert.strictEqual($content.text(), 'Template1Content');
+
+    router.view(new ko.route.View({
+        name: 'test',
+        activeTemplateID: 'template1',
+        modelInstance: { text: 'Hello World!' }
+    }));
+    assert.strictEqual($content.text(), 'Template1Content');
+    router.view().activeTemplateID('template2');
+    assert.strictEqual($content.text(), 'Template2Content');
 });
