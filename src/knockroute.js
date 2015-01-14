@@ -8,14 +8,21 @@
         ko.bindingHandlers['routeTemplate'] = routerBinding;
     }
 
+    var rtrim = /^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g;
+    function trim(s){        
+        kr.utils.trim = function(s){        
+            return s.replace(rtrim, '');
+        }
+    }
+
     function isTrue(element, attribute) {
-        return ((element.getAttribute(attribute) || '').toLowerCase().trim() === 'true');
+        return trim(((element.getAttribute(attribute) || '').toLowerCase()) === 'true');
     }
 
     //#region Utils
 
     kr.utils = kr.utils || {};
-
+    
     kr.utils.clearArray = function (array) {
         while (array.length > 0) {
             array.pop();
@@ -471,13 +478,20 @@
             }
         }
 
-        var requiredCount = this.segments.reduce(function (prev, cur) {
+        //var requiredCount = this.segments.reduce(function (prev, cur) {
+        //    if (!cur.parts[0].optional) {
+        //        return prev + 1;
+        //    } else {
+        //        return prev;
+        //    }
+        //}, 0);
+        
+        var requiredCount = 0;
+        ko.utils.arrayForEach(this.segments, function (cur) {
             if (!cur.parts[0].optional) {
-                return prev + 1;
-            } else {
-                return prev;
+                requiredCount++;
             }
-        }, 0);
+        });
 
         if (pathParts.length < requiredCount) {
             return null;
@@ -1065,7 +1079,7 @@
 
             return Promise.all(waits)
                 .then(aborter)
-                .catch(function (reason) {
+                ['catch'](function (reason) {
                     aborter = null;                    
                     if (reason !== 'abort') {                        
                         handleError('Error', options.errorTemplateID, reason, routeValues);
@@ -1193,7 +1207,7 @@
             }
 
             if (ctx.view === currentView()) {
-                executeModelAction(ctx.view, options.updateMethodName, ctx.routeValues).catch(function(reason){
+                executeModelAction(ctx.view, options.updateMethodName, ctx.routeValues)['catch'](function (reason) {
                     handleError('Error', options.errorTemplateID, reason, ctx.routeValues);
                 });                
             } else {

@@ -6,7 +6,9 @@
 var orig = window.location.href;
 
 QUnit.done(function () {
-    window.history.pushState({}, '', orig);
+    if (window.history.pushState) {
+        window.history.pushState({}, '', orig);
+    }
 });
 
 QUnit.module('Utils');
@@ -955,7 +957,7 @@ QUnit.asyncTest('TestAreaRouting', function (assert) {
                 assert.strictEqual(router.view().modelInstance.data.action, 'baz');
 
                 QUnit.start();
-            });
+            }, 1);
         }, 1);
     }, 1);
 });
