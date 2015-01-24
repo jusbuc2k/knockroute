@@ -1,16 +1,34 @@
 ﻿; (function (global, ko) {
     "use strict";
 
+    //#region Dependencies
+
+    var Promise = global.Promise || global.ES6Promise.Promise;
+    
+    //#endregion
+    
+    // Object that will be exported
     var kr = {};
 
+    // Export everthing attached to kr into ko.route
     function extendKo() {
         ko.route = kr;
         ko.bindingHandlers['routeTemplate'] = routerBinding;
     }
 
+    //#region Constants
+
     var rtrim = /^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g;
-    function trim(s){        
-        kr.utils.trim = function(s){        
+    var elementPattern = '\\{(\\w+)([=:]\\w+)?(\\??)\\}';
+    var literalRegex = /^[\w\+\.\-\~]+$/i;
+    var queryMarker = '?';
+
+    //#endregion
+
+    //#region Private Utils
+
+    function trim(s) {
+        kr.utils.trim = function (s) {
             return s.replace(rtrim, '');
         }
     }
@@ -19,7 +37,49 @@
         return trim(((element.getAttribute(attribute) || '').toLowerCase()) === 'true');
     }
 
-    //#region Utils
+    function isArray(obj) {
+        return (typeof obj === 'object' && typeof obj.length === 'number');
+    }
+
+    var routeConstraints = {
+        equals: function (test) {
+            return function (value) {
+                return test === value;
+            };
+        },
+        dataType: function (dataType) {
+            var regex = /.*/;
+
+            if (dataType === 'float') {
+                regex = /^[-+]?\d*\.?\d*$/i;
+            } else if (dataType === 'int') {
+                regex = /^[-+]?\d*$/i
+            } else if (dataType === 'hex') {
+                regex = /^[a-fA-F0-9]*$/i;
+            }
+
+            return function (value) {
+                return regex.test(value);
+            }
+        }
+    };
+
+    function createConstraint(constraintExpression) {
+        if (constraintExpression == null) {
+            return null;
+        }
+        else if (constraintExpression[0] === ':') {
+            return routeConstraints.dataType(constraintExpression.slice(1));
+        } else if (constraintExpression[0] === '=') {
+            return routeConstraints.equals(constraintExpression.slice(1));
+        } else {
+            return null;
+        }
+    }
+
+    //#endregion
+
+    //#region Public Utils
 
     kr.utils = kr.utils || {};
     
@@ -147,56 +207,26 @@
             element.innerText = textContent;
         }
     };
-
-    var routeConstraints = {
-        equals: function (test) {
-            return function (value) {
-                return test === value;
-            };
-        },
-        dataType: function (dataType) {
-            var regex = /.*/;
-
-            if (dataType === 'float') {
-                regex = /^[-+]?\d*\.?\d*$/i;
-            } else if (dataType === 'int') {
-                regex = /^[-+]?\d*$/i
-            } else if (dataType === 'hex') {
-                regex = /^[a-fA-F0-9]*$/i;
-            }
-
-            return function (value) {
-                return regex.test(value);
-            }
-        }
-    };
-
-    function createConstraint(constraintExpression) {
-        if (constraintExpression == null) {
-            return null;
-        }
-        else if (constraintExpression[0] === ':') {
-            return routeConstraints.dataType(constraintExpression.slice(1));
-        } else if (constraintExpression[0] === '=') {
-            return routeConstraints.equals(constraintExpression.slice(1));
-        } else {
-            return null;
-        }
-    }
-
-    //#endregion
-
-    //#region pseudo-constants
-
-    //var keyValuePattern = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
-    var elementPattern = '\\{(\\w+)([=:]\\w+)?(\\??)\\}';
-    var literalRegex = /^[\w\+\.\-\~]+$/i;
-    var queryMarker = '?';
-
+    
     //#endregion
 
     //#region Route
 
+    function Route(routeTemplate, options) {
+        /// <param name="route" type="String"/>
+        /// <param name="options" type="Object"/>
+        var self = this;
+        var defaultOptions = {
+            pathSeperator: '/'
+        };
+
+        options = this.options = kr.utils.defaults(defaultOptions, options || {});
+
+        this.routeTemplate = routeTemplate;
+        this.segments = Route.parseTemplate(routeTemplate, options.pathSeperator);
+    }
+
+    // Static: Parses a route segment value into the given data type
     Route.parseSegmentValue = function (value, type) {
         switch (type) {
             case 'float': return parseFloat(value);
@@ -206,6 +236,7 @@
         }
     };
 
+    // Static: Parses the given route template string into an array of route segment objects.
     Route.parseTemplate = function (routeTemplate, pathSeperator) {
         /// <param name="route" type="String">route string</param>            
         var routeSegments = [];
@@ -286,20 +317,7 @@
         return routeSegments;
     };
 
-    function Route(routeTemplate, options) {
-        /// <param name="route" type="String"/>
-        /// <param name="options" type="Object"/>
-        var self = this;
-        var defaultOptions = {
-            pathSeperator: '/'
-        };
-
-        options = this.options = kr.utils.defaults(defaultOptions, options || {});
-
-        this.routeTemplate = routeTemplate;
-        this.segments = Route.parseTemplate(routeTemplate, options.pathSeperator);
-    }
-
+    // Returns the extracted route values from a given path string if the route matches the path
     Route.prototype.match = function (path, defaultValues) {
         /// <param name="path" type="String"/>
         /// <param name="defaultValues" type="Object"/>     
@@ -417,6 +435,7 @@
         return routeValues;
     };
 
+    // Resolves the given route values object to a string path
     Route.prototype.resolve = function (routeValues, currentPath) {
         /// <param name="routeValues" type="Object"/>
         /// <param name="defaultValues" type="Object" optional="true"/>
@@ -477,15 +496,7 @@
                 throw 'Multi-part route segments are not supported.';
             }
         }
-
-        //var requiredCount = this.segments.reduce(function (prev, cur) {
-        //    if (!cur.parts[0].optional) {
-        //        return prev + 1;
-        //    } else {
-        //        return prev;
-        //    }
-        //}, 0);
-        
+       
         var requiredCount = 0;
         ko.utils.arrayForEach(this.segments, function (cur) {
             if (!cur.parts[0].optional) {
@@ -497,19 +508,11 @@
             return null;
         }
 
-        //for (var i = this.segments.length - 1; i >= 0; i--) {
-        //    for (var y = 0; y < this.segments[i].parts.length; y++) {
-        //        if (routeValues.hasOwnProperty(this.segments[i].parts[y].name)) {
-        //            path = path.replace('{' + this.segments[i].parts[y].name + '}', routeValues[this.segments[i].parts[y].name]);
-        //            used.push(this.segments[i].parts[y].name);
-        //        }
-        //    }
-        //}
-
         return pathParts.join(this.options.pathSeperator);
     };
 
-    Route.prototype.hasKey = function (key) {
+    // Returns true if the given key is defined in a route segment of this route, false otherwise.
+    Route.prototype.hasKey = function (key) {        
         for (var x = 0; x < this.segments.length; x++) {
             for (var y = 0; y < this.segments[x].parts.length; y++) {
                 if (this.segments[x].parts[y].name === key) {
@@ -526,12 +529,15 @@
 
     //#region Default Providers
 
+    // A path provider that persists the path value to the hash (#) portion of the URL.
     function HashPathStringProvider() {
         var self = this;
         var lastPath = '';
 
+        // Fires whenever the path value changes
         self.pathChanged = new ko.subscribable();
 
+        // Sets the current path value
         self.setPath = function (path) {
             if (path) {
                 window.location.hash = self.decorate(path);
@@ -540,10 +546,12 @@
             }
         };
 
+        // Gets the current path value
         self.getPath = function () {
             return window.location.hash.slice(1);
         };
 
+        // Decorates the path value with provider specific formatting (e.g. # prefix)
         self.decorate = function (path) {
             if (path.indexOf('#/') === 0) {
                 return path;
@@ -556,17 +564,20 @@
             }
         };
 
+        // Starts monitoring changes to the path persistence medium
         self.start = function () {
             // subscribe to the hashchange event if useRouteValues
             kr.utils.attachEvent(window, 'hashchange', hashChanged);
             hashChanged();
         };
 
+        // Stops monitoring changes to the path
         self.stop = function () {
             // subscribe to the hashchange event if useRouteValues
             kr.utils.detachEvent(window, 'hashchange', hashChanged);
         };
 
+        // Sets the path value to the previous value.
         self.revert = function (callback) {
             self.setPath(lastPath);
             if (typeof callback === 'function') {
@@ -593,32 +604,39 @@
 
         options = kr.utils.defaults(defaultOptions, options || {});
 
+        // Fires whenever the path value changes
         self.pathChanged = new ko.subscribable();
 
+        // Sets the current path value
         self.setPath = function (path) {
             window.history.pushState({}, '', extractBase(window.location.pathname) + path);
             self.pathChanged.notifySubscribers(path);
         };
 
+        // Gets the current path value
         self.getPath = function () {
             return stripBase(window.location.pathname);
         };
 
+        // Decorates the path value with any URL specific formatting
         self.decorate = function (path) {
             return path;
         };
 
+        // Starts monitoring changes to the path persistence medium
         self.start = function () {
             // subscribe to the hashchange event if useRouteValues
             kr.utils.attachEvent(window, 'popstate', handlePopState);
             handlePopState();
         };
 
+        // Stops monitoring changes to the path
         self.stop = function () {
             // subscribe to the hashchange event if useRouteValues
             kr.utils.detachEvent(window, 'popstate', handlePopState);
         };
 
+        // Sets the path value to the previous value.
         self.revert = function (callback) {
             self.setPath(lastPath);
             window.setTimeout(callback, 20);
@@ -653,10 +671,12 @@
 
     kr.HistoryPathStringProvider = HistoryPathStringProvider;
 
+    // The model factory is responsible for creating instances of constructor function models
     function DefaultModelFactory() {
         var self = this;
     }
 
+    // Creates an instance of an object using the given constructor.
     DefaultModelFactory.prototype.createModel = function (constructor, args) {
         function ViewModelWrapper() {
             return constructor.apply(this, args);
@@ -671,16 +691,16 @@
         }
     };
 
-    kr.HistoryPathStringProvider = HistoryPathStringProvider;
-
+    // The template provider is responsible for loading an unloading HTML templates.
     function DefaultTemplateProvider() {
         var self = this;
     }
-
+    
     DefaultTemplateProvider.prototype.loadTemplate = function (view) {
-        ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block.</summary>
-        ///<param name="view" type="kr.View">The View object</param>        
-        ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>        
+        ///<summary>Loads the given template, and returns a promise that will resolve when the template is loaded.</summary>
+        ///<param name="view" type="kr.View">A view object with template information or a template object</param>
+
+        // The default template provider doesn't do anything but return the given template by ID
         var template = window.document.getElementById(view.templateID);
 
         if (!template) {
@@ -691,12 +711,10 @@
             throw 'The element with id ' + view.templateID + ' must be a <script> tag in order to use it as a template.';
         }
 
-        return new Promise(function (resolve, reject) {
-            resolve({
-                success: true,
-                statusCode: 203,
-                template: template
-            });
+        return Promise.resolve({
+            success: true,
+            statusCode: 203,
+            template: template
         });
     };
 
@@ -712,8 +730,7 @@
 
         //TODO: Should this do something? Should the DefaultTemplateProvider exist, or should it be none?
     };
-
-
+    
     kr.DefaultTemplateProvider = DefaultTemplateProvider;
 
     function AjaxTemplateProvider(options) {
@@ -738,9 +755,9 @@
     }
 
     AjaxTemplateProvider.prototype.loadTemplate = function (view) {
-        ///<summary>Loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source.</summary>
-        ///<param name="view" type="kr.View">The View object</param>
-        ///<param name="completeCallback" type="Function" optional="true">A callback function to execute when the template is loaded.</param>
+        ///<summary>Using jQuery AJAX, loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source; returns a promise that resolves when the template is loaded.</summary>
+        ///<param name="view" type="kr.View">The view or template object with the necessary properties to load the template.</param>
+        ///<remarks>Uses the jQuery $.ajax function.</remarks>
         var template = window.document.getElementById(view.templateID);
         var templateContainer = this.options.templateContainer || window.document.body;
         var self = this;
@@ -838,19 +855,6 @@
 
     //#endregion
 
-    //#region Channel
-
-    function Channel(name) {
-        var self = this;
-
-        this.name = name;
-        this.bus = ko.subscribable();
-    }
-
-    kr.Channel = Channel;
-
-    //#endregion
-
     //#region Area
 
     function Area(attributes) {
@@ -919,6 +923,7 @@
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
         /// <param name="options" type="Object">A set of options.</param>
+
         /// <field name='view' type='kr.View'>Gets the current view.</field>
         /// <field name='pathProvider'>Gets or sets the path provider, which is responsible for watching, getting, and setting the current path portion of the URL.</field>
         /// <field name='templateProvider'>Gets or sets the template provider, which is responsible for loading and unloading templates.</field>
@@ -930,44 +935,49 @@
             routes: [
                 {
                     template: '{view}/{id?}',
-                    defaults: { view: 'home' }
+                    defaults: {
+                        view: 'home'
+                    }
                 }
             ],
+            areas: [],
+            views: [],
+            templates: [],
             viewRouteKey: 'view',
             areaRouteKey: 'area',
             loadMethodName: 'load',
             updateMethodName: 'update',
-            areas: [],
-            views: [],
-            templates: [],
             pathProvider: 'hash',
             templateProvider: 'default',
-            errorTemplateID: '',
-            notFoundTemplateID: '',
+            defaultContent: 'Loading...', // Content to display before init
             defaultTemplateID: '',
-            defaultContent: 'Loading...'
+            errorTemplateID: '',
+            notFoundTemplateID: ''                 
         };
+
+        var initialized = false;
+        var templates = [];
+        var routes = [];
+        var areaRoutes = [];
+        var areas = [];
+        var views = [];    
+        var pathChangedEvent;
+        var aborter = null;
+        var defaultView;
 
         options = kr.utils.defaults(defaultOptions, options || {});
 
-        var initialized = false;
-        var routesInitialized = false;
-        var defaultView = new kr.View({
+        defaultView = new kr.View({
             name: null,
             templateID: options.defaultTemplateID,
             content: options.defaultContent
         });
-        var routes = [];
-        var areas = [];
-        var views = [];
-        var templates = [];
-        var pathChangedEvent;
-        var aborter = null;
 
         //#region Privates
-
+        
+        // Gets or sets the current view
         var currentView = ko.observable(defaultView);
-       
+
         function executeModelAction(view, actionName, routeValues) {
             var p;
             var newTemplateID = view.templateID;
@@ -976,7 +986,7 @@
 
             var actionContext = {
                 cancel: function () {
-
+                    
                 },
                 setTemplate: function (templateID) {
                     if (canSetTemplate) {
@@ -1100,20 +1110,13 @@
             return self.templateProvider.loadTemplate(tmpl);
         }
 
-        function getMatchingViewAndRouteValues(path) {
+        function findFirstMatchingRoute(path, routes){
+            var i;
+            var view;
             var rv;
-            var qs;
-            var result = {
-                area: null,
-                view: null,
-                routeValues: null
-            };
 
-            for (var i = 0; i < routes.length; i++) {
+            for (i = 0; i < routes.length; i++){
                 if (rv = routes[i].route.match(path, routes[i].defaults)) {
-                    var area;
-                    var view;
-
                     if (rv[options.areaRouteKey]) {
                         view = self.getView(rv[options.viewRouteKey], rv[options.areaRouteKey]);
                     } else {
@@ -1124,37 +1127,71 @@
                         continue;
                     }
 
-                    //if (rv[options.areaRouteKey]) {
-                    //    area = self.getArea(rv[options.areaRouteKey]);
-                    //    if (area && !(area = area.getView(rv[options.viewRouteKey]))) {
-                    //        continue;
-                    //    }
-                    //}
-                    //else {
-                    //    if (rv[options.viewRouteKey] && !(view = self.getView(rv[options.viewRouteKey]))) {
-                    //        continue;
-                    //    }
-                    //}
-
-                    result.area = area;
-                    result.view = view;
-                    break;
+                    return {
+                        view: view,
+                        routeValues: rv
+                    };
                 }
             }
 
-            if (rv == null || result.view == null) {
+            return null;
+        }
+
+        function findFirstResolvingRoute(routeValues, path, routes) {
+            var i;
+            var tmp;
+            var route;
+            var defaults;
+
+            for (i = 0; i < routes.length; i++) {
+                if (tmp = routes[i].route.resolve(routeValues, path)) {
+                    route = routes[i].route;
+                    defaults = routes[i].defaults;
+
+                    if (routeValues[options.areaRouteKey] && (!defaults[options.areaRouteKey] || !self.getArea(defaults[options.areaRouteKey]))) {
+                        continue;
+                    }
+
+                    return {
+                        route: route,
+                        defaults: defaults
+                    };
+                }
+            }
+
+            return null;
+        }
+
+        function getMatchingViewAndRouteValues(path) {
+            var rv;
+            var qs;            
+            var match;
+
+            match = findFirstMatchingRoute(path, areaRoutes);
+
+            if (match == null) {
+                match = findFirstMatchingRoute(path, routes);
+            }
+
+            if (match == null || match.routeValues == null || match.view == null) {
                 return null;
             }
 
-            qs = kr.utils.parseQueryString(path);
-            rv = kr.utils.defaults(qs, rv);
 
-            result.routeValues = rv;
-
-            return result;
+            return {
+                view: match.view,
+                routeValues: ko.utils.extend(match.routeValues, kr.utils.parseQueryString(path))
+            };
         }
 
         function handleError(name, errorTemplateID, reason, routeValues) {
+            var errorTemplate;            
+            var errorArgs = {
+                routeValues: routeValues,
+                context: this,
+                error: reason,
+                errorHandled: false
+           };
             var errorView = new kr.View({
                 name: name,
                 modelInstance: {
@@ -1162,10 +1199,8 @@
                     routeValues: routeValues,
                     error: reason
                 },
-                errorContent: null
+                content: null
             });
-            var errorTemplate;            
-            var errorArgs = { routeValues: routeValues, context: this, error: reason, errorHandled: false };
 
             self.onLoadError.notifySubscribers(errorArgs);
                         
@@ -1198,12 +1233,8 @@
             var view;
 
             if (ctx == null) {
-                if (options.notFoundTemplateID) {
-                    handleError('NotFound', options.notFoundTemplateID, 'Path not found');
-                    return;
-                } else {
-                    throw 'Path not found';
-                }
+                handleError('NotFound', options.notFoundTemplateID, 'Path not found');
+                return;
             }
 
             if (ctx.view === currentView()) {
@@ -1220,47 +1251,181 @@
             }
         }
 
-        //TODO: Premature optmization here, see if we need it later
-        //
-        //function buildIndex() {
-        //    //channelIndex = {};
-        //    viewIndex = {};
-        //    var i;
+        function setPathProvider(newProvider) {
+            if (pathChangedEvent) {
+                pathChangedEvent.dispose();
+                pathChangedEvent = null;
+            }
 
-        //    //for (i = 0; i < channels.length; i++) {
-        //    //    channelIndex[channels[i].name] = channels[i];
-        //    //}
+            if (self.pathProvider) {
+                self.pathProvider.stop();
+            }
 
-        //    for (i = 0; i < views.length; i++) {
-        //        viewIndex[views[i].name] = views[i];
-        //    }            
-        //}
+            self.pathProvider = newProvider;
+            
+            pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
+
+            if (initialized) {
+                self.pathProvider.start();
+            }
+        }
+        
+        function init() {
+            if (initialized) {
+                return;
+            }
+
+            currentView(defaultView);
+
+            self.pathProvider.start();
+
+            initialized = true;
+        }
+
+        function triggerPathChanged() {
+            onPathChanged(self.path.getPath());
+        }
+
+        function addView(view) {
+            var v;
+            var area;
+            
+            //TODO: Is there really a use case for passing in a kr.View() vs. an anonymous obj?                    
+            if (view instanceof kr.View) {
+                v = view;
+            } else {
+                v = new kr.View(view);
+            }
+
+            if (v.area == null) {
+                views.push(v);
+            } else {
+                area = self.getArea(v.area);
+
+                if (area == null) {
+                    throw 'Invalid area name on view';
+                }
+
+                area.addView(v);
+            }
+        }
 
         //#endregion
 
         //#region public properties
-
+        
+        // Gets or sets the path provider
         self.pathProvider = new kr.HashPathStringProvider();
 
         self.templateProvider = new kr.DefaultTemplateProvider();
 
         self.modelFactory = new DefaultModelFactory();
 
-        self.dispose = function () {
-            self.pathProvider.stop();
-            for (var i = 0; i < self.views.length; i++) {
-                self.views[i].unloadModel(true);
-            }
-            if (pathChangedEvent) {
-                pathChangedEvent.dispose();
-                pathChangedEvent = null;
-            }
-        };
-
         //#endregion
 
         //#region Public Methods.
 
+        // Clears all existing templates.
+        self.clearTemplates = function () {
+            kr.utils.clearArray(templates);
+        };
+
+        // Clears all existing route table entries.
+        self.clearRoutes = function () {
+            kr.utils.clearArray(routes);
+        };
+
+        // Clears all existing views and areas.
+        self.clearViews = function () {
+            kr.utils.clearArray(areas);
+            kr.utils.clearArray(areaRoutes);
+            kr.utils.clearArray(views);
+        };
+
+        // Adds templates.
+        self.addTemplates = function (newTemplates) {
+            if (newTemplates && newTemplates.forEach) {
+                newTemplates.forEach(function (tmpl) {
+                    templates.push(tmpl);
+                });
+            }
+        };
+
+        // Adds areas
+        self.addAreas = function (newAreas) {
+            if (newAreas && newAreas.forEach) {
+                newAreas.forEach(function (area) {
+                    areas.push(new kr.Area(area));
+                        
+                    //TODO: area prop name here should be options.areaRouteKey
+
+                    if (isArray(area.routes)) {
+                        area.routes.forEach(function (route) {
+                            areaRoutes.push({
+                                route: new kr.Route('{area=' + area.name + '}/' + route.route.routeTemplate),
+                                defaults: ko.utils.extend({ area: area.name }, route.defaults)
+                            });
+                        });
+                    } else {
+                        areaRoutes.push({
+                            route: new kr.Route('{area=' + area.name + '}/' + options.routes[0].template),
+                            defaults: ko.utils.extend({ area: area.name }, options.routes[0].defaults)
+                        });
+                    }
+                });
+            } else {
+                throw new TypeError('newAreas must be an array.');
+            }
+        };
+
+        // Adds views
+        self.addViews = function (newViews) {
+            /// <summary>Adds one or more views specified in the given array to the views collection</summary>
+            /// <param name="newViews" type="Array">A collection of views</param>            
+            if (newViews && newViews.forEach) {
+                newViews.forEach(function (view) {
+                    addView(view);
+                });
+            } else {
+                throw new TypeError('addedViews must be an array.');
+            }
+        };
+
+        // Inserts routes at the beginning of the route table.
+        self.insertRoutes = function (newRoutes) {
+            /// <summary>Adds one or more routes specified in the given array to the beginning of the route table</summary>
+            /// <param name="newRoutes" type="Array">A collection of routes</param>  
+            var i;
+
+            if (newRoutes && newRoutes.length) {
+                for (i = newRoutes.length - 1; i >= 0 ; i--) {
+                    routes.splice(0, 0, {
+                        route: new kr.Route(newRoutes[i].template),
+                        defaults: newRoutes[i].defaults
+                    });
+                }
+            } else {
+                throw new TypeError('insertedRoutes must be an array.');
+            }
+        };
+
+        // Adds routes at the end of the route table.
+        self.addRoutes = function (newRoutes) {
+            /// <summary>Adds one or more routes specified in the given array to the end of the route table</summary>
+            /// <param name="newRoutes" type="Array">A collection of routes</param>
+            if (newRoutes && newRoutes.forEach) {
+                newRoutes.forEach(function (route) {
+                    routes.push({
+                        route: new kr.Route(route.template),
+                        defaults: route.defaults
+                    });
+                });
+            } else {
+                throw new TypeError('addedRoutes must be an array.');
+            }
+        };
+        
+        // Gets an area by name.
         self.getArea = function (name) {
             /// <summary>Gets an area by name.</summary>
             /// <param name="name" type="String">The area name</param>
@@ -1270,6 +1435,7 @@
             });
         };
 
+        // Gets a view by name and/or area name.
         self.getView = function (name, areaName) {
             /// <signature>
             /// <summary>Gets a view in the default area by name.</summary>
@@ -1300,6 +1466,7 @@
             }
         };
 
+        // Gets a template, or if the template cannot be located, returns the given defaultValue
         self.getTemplate = function (templateID, defaultValue) {
             var tmpl = ko.utils.arrayFirst(templates, function (template) {
                 return template.templateID === templateID;
@@ -1311,45 +1478,88 @@
             }
         };
 
-        self.resolve = function (routeValues) {
-            var currentPath = self.pathProvider.getPath();
+        // Sets the given router options
+        self.setOptions = function (newOptions) {
+            if (newOptions == null) {
+                throw new TypeError('newOptions must be an object.');
+            }
+
+            ko.utils.extend(options, newOptions);
+                                                
+            if (isArray(newOptions.templates)) {
+                self.clearTemplates();
+                self.addTemplates(newOptions.templates);
+            }
+
+            if (isArray(newOptions.routes)) {
+                self.clearRoutes();
+                self.addRoutes(newOptions.routes);
+            }
+
+            if (isArray(newOptions.areas) && isArray(newOptions.views)) {
+                self.clearViews();
+                self.addAreas(newOptions.areas);
+                self.addViews(newOptions.views);
+            } else if (isArray(newOptions.areas)) {
+                self.clearViews();
+                self.addAreas(newOptions.areas);
+            } else if (isArray(newOptions.views)) {
+                self.clearViews();
+                self.addViews(newOptions.views);
+            }
+
+            // Support fakes for testing mostly
+            // (Or other template storage/fetching mechanisms I guess)
+            if (typeof newOptions.templateProvider === 'object') {
+                self.templateProvider = newOptions.templateProvider;
+            } else if (newOptions.templateProvider === 'ajax') {
+                self.templateProvider = new kr.AjaxTemplateProvider();
+            }
+            
+            // Support the popstate path provider, and fakes for testing mostly
+            // (there's only so may ways you are going to persist the path)
+            if (typeof newOptions.pathProvider === 'object') {
+                setPathProvider(newOptions.pathProvider);
+            } else if (newOptions.pathProvider === 'history') {
+                setPathProvider(new kr.HistoryPathStringProvider(newOptions.basePath));
+            }
+        };
+
+        // Resolves a given set of route values to a string path
+        self.resolve = function (routeValues, ignoreCurrent) {
+            var currentPath;
             var path = '';
             var nvc = {};
             var hasQuery = false;
-            var tmp;
-            var route;
-            var defaults;
+            var match;
 
-            for (var i = 0; i < routes.length; i++) {
-                if (tmp = routes[i].route.resolve(routeValues, currentPath)) {
-                    route = routes[i].route;
-                    defaults = routes[i].defaults;
-
-                    if (routeValues[options.areaRouteKey] && (!defaults[options.areaRouteKey] || !self.getArea(defaults[options.areaRouteKey]))) {
-                        continue;
-                    }
-
-                    break;
-                }
+            if (!ignoreCurrent) {
+                currentPath = self.pathProvider.getPath();
             }
 
-            if (route == null) {
-                throw 'No matching route for current path.';
+            match = findFirstResolvingRoute(routeValues, currentPath, areaRoutes);
+
+            if (match == null) {
+                match = findFirstResolvingRoute(routeValues, currentPath, routes);
+            }
+                        
+            if (match == null) {
+                throw 'No matching route for given path';
             }
 
             for (var key in routeValues) {
                 //TODO: if you don't want to apply optional defaults, 
                 // ignore them here by adding a getKey instead of hasKey and checking type
                 // then get rid of the kr.utils.defaults below
-                if (routeValues.hasOwnProperty(key) && !route.hasKey(key)) {
+                if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key)) {
                     nvc[key] = routeValues[key];
                     hasQuery = true;
                 }
             }
 
-            kr.utils.defaults(defaults, routeValues);
+            kr.utils.defaults(match.defaults, routeValues);
 
-            path += route.resolve(routeValues, currentPath);
+            path += match.route.resolve(routeValues, currentPath);
 
             if (hasQuery) {
                 path += (queryMarker + kr.utils.serializeQueryString(nvc));
@@ -1382,91 +1592,32 @@
                 //needed in onPathChanged
                 throw 'No matching route or path exists.';
             }
-        }
+        };
 
-        self.setTemplate = function (templateID) {            
+        // Sets the active templateID on the current view. This is the same as calling view().activeTemplateID(...)
+        self.setTemplate = function (templateID) {
             currentView().activeTemplateID(templateID);
         };
 
-        self.addViews = function (addedViews) {
-            /// <summary>Adds one or more views specified in the given array to the views collection</summary>
-            /// <param name="addedViews" type="Array">A collection of views</param>            
-            var i;
+        // Disposes the router and all related resources, or at least, in theory it does.
+        self.dispose = function () {
+            self.pathProvider.stop();
 
-            if (initialized) {
-                throw 'Views cannot be added once the router is initalized';
-            }
-
-            if (addedViews && addedViews.length) {
-                for (i = 0; i < addedViews.length; i++) {
-                    options.views.push(addedViews[i]);
-                }
-            }
-        };
-
-        self.insertRoutes = function (insertedRoutes) {
-            /// <summary>Adds one or more routes specified in the given array to the beginning of the route table</summary>
-            /// <param name="addedRoutes" type="Array">A collection of routes</param>  
-            if (routesInitialized) {
-                throw 'Routes cannot be added once the router is initalized';
-            }
-            var i;
-            if (insertedRoutes && insertedRoutes.length) {
-                for (i = 0; i < insertedRoutes.length; i++) {
-                    options.routes.splice(0, 0, insertedRoutes[i]);
-                }
-            }
-        };
-
-        self.addRoutes = function (addedRoutes) {
-            /// <summary>Adds one or more routes specified in the given array to the end of the route table</summary>
-            /// <param name="addedRoutes" type="Array">A collection of routes</param>  
-            if (initialized) {
-                throw 'Routes cannot be added once the router is initalized';
-            }
-            var i;
-            if (addedRoutes && addedRoutes.length) {
-                for (i = 0; i < addedRoutes.length; i++) {
-                    options.routes.push(addedRoutes[i]);
-                }
-            }
-        };
-
-        self.insertRoutes = function (insertedRoutes) {
-            /// <summary>Adds one or more routes specified in the given array to the beginning of the route table</summary>
-            /// <param name="addedRoutes" type="Array">A collection of routes</param>  
-            if (initialized) {
-                throw 'Routes cannot be added once the router is initalized';
-            }
-            var i;
-            if (insertedRoutes && insertedRoutes.length) {
-                for (i = 0; i < insertedRoutes.length; i++) {
-                    options.routes.splice(0, 0, insertedRoutes[i]);
-                }
-            }
-        };
-
-        self.clearRoutes = function () {
-            /// <summary>Removes all existing routes from the route table.</summary>
-            if (initialized) {
-                throw 'Routes cannot be modified once the router is initalized';
+            if (pathChangedEvent) {
+                pathChangedEvent.dispose();
+                pathChangedEvent = null;
             }
 
-            kr.utils.clearArray(options.routes);
-        };
+            for (var i = 0; i < views.length; i++) {
+                executeModelUnload(views[i], true);
+            }
 
-        self.destroy = function () {
-            self.pathProvider.stop();            
-            kr.utils.clearArray(routes);
-            kr.utils.clearArray(areas);
-            kr.utils.clearArray(views);
-            kr.utils.clearArray(templates);
+            executeModelUnload(currentView(), true);
             currentView(defaultView);
         };
 
+        // Initializes the router. This method can only be called once, and if called again it will do nothing.
         self.init = init;
-
-        self.initRoutes = initRoutes;
 
         //#endregion
 
@@ -1486,131 +1637,7 @@
 
         //#region Init
 
-        function initRoutes() {
-            if (initialized) {
-                return;
-            }
-
-            kr.utils.clearArray(routes);
-            // add all the routes from the constructor
-            for (i = 0; i < options.routes.length; i++) {
-                routes.push({
-                    route: new kr.Route(options.routes[i].template),
-                    defaults: options.routes[i].defaults
-                });
-            };
-
-            // add all the areas used in the constructor
-            if (options.areas && options.areas.length) {
-                kr.utils.clearArray(areas);
-                var area;
-                var areaRoutes = [];
-
-                for (var i = 0; i < options.areas.length; i++) {
-                    area = new kr.Area(options.areas[i]);
-                    areas.push(area);
-
-                    // duplicate the default routes for each area
-                    for (var x = 0; x < routes.length; x++) {
-                        areaRoutes.push({
-                            template: '{area=' + area.name + '}/' + routes[x].route.routeTemplate,
-                            //TODO: area prop name here should be options.areaRouteKey
-                            defaults: ko.utils.extend({ area: area.name }, routes[x].defaults)
-                        });
-                    }
-                }
-
-                // put area routes at the end of the route table so they aren't tried first
-                for (var i = 0; i < areaRoutes.length; i++) {
-                    routes.push({
-                        route: new kr.Route(areaRoutes[i].template),
-                        defaults: areaRoutes[i].defaults
-                    });
-                }
-            }
-
-            routesInitialized = true;
-        }
-
-        function init() {
-            if (initialized) {
-                return;
-            }
-            var v;
-            var area;
-            var i;
-
-            self.pathProvider.stop();
-
-            initRoutes();
-
-            // add all the views used in the constructor
-            if (options.views && options.views.length) {
-                kr.utils.clearArray(views);            
-                for (i = 0; i < options.views.length; i++) {
-                    addView(options.views[i]);
-                }
-            } else {
-                throw 'ViewRouter could not be initialized because no views are defined.';
-            }
-
-            if (options.templates && options.templates.length) {
-                kr.utils.clearArray(templates);
-                for (i = 0; i < options.templates.length; i++) {
-                    templates.push(options.templates[i]);
-                }
-            }
-
-            // begin watching for path changes
-            if (!pathChangedEvent) {
-                pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
-                self.pathProvider.start();
-            }
-            initialized = true;
-        }
-
-        function addView(view) {
-            var v;
-            var area;
-
-            //TODO: Is there really a use case for passing in a kr.View() vs. an anonymous obj?                    
-            if (view instanceof kr.View) {
-                v = view;
-            } else {
-                v = new kr.View(view);
-            }
-
-            if (v.area == null) {
-                views.push(v);
-            } else {
-                area = self.getArea(v.area);
-
-                if (area == null) {
-                    throw 'Invalid area name on view';
-                }
-
-                area.addView(v);
-            }
-
-            // See comment on buildIndex()
-            //buildIndex();
-        }
-
-        // Support fakes for testing mostly
-        // (Or other template storage/fetching mechanisms I guess)
-        if (typeof options.templateProvider === 'object') {
-            self.templateProvider = options.templateProvider;
-        } else if (options.templateProvider === 'ajax') {
-            self.templateProvider = new kr.AjaxTemplateProvider();
-        }
-
-        // Support the popstate path provider, and fakes for testing mostly
-        // (there's only so may ways you are going to persist the path)
-        if (typeof options.pathProvider === 'object') {
-            self.pathProvider = options.pathProvider;
-        } else if (options.pathProvider === 'history') {
-            self.pathProvider = new kr.HistoryPathStringProvider(options.basePath);
-        }
+        this.setOptions(options);
 
         //#endregion
     }
@@ -1620,6 +1647,7 @@
     //#endregion
 
     //#region ko Binding
+
     var routerBinding = {
         'init': function (element, valueAccessor, allBindings, viewModel, bindingContext) {
             var result = ko.bindingHandlers.template.init(element, function () {
@@ -1667,6 +1695,7 @@
             // Nothing to do here I don't think
         }
     };
+
     //#endregion
 
     extendKo();

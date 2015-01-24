@@ -203,7 +203,7 @@ QUnit.test('TestMatch', function (assert) {
     });
     assert.ok(!route1.match(''));
     assert.ok(route1.match('/foo'));
-        
+            
     var route2 = new ko.route.Route('{view}/{id?}');
     assert.ok(rv = route2.match('/Foo/123'), 'Path should match');    
     assert.notEqual(rv, null);
@@ -230,12 +230,10 @@ QUnit.test('TestMatch', function (assert) {
         //assert.strictEqual(rv.day, '27');
         //assert.strictEqual(rv.action, 'view');
     });
-        
     
     assert.ok(rv = new ko.route.Route('{channel}/{view}/{id?}').match('', { channel: 'default', view: 'index' }));
     assert.strictEqual(rv.channel, 'default');
     assert.strictEqual(rv.view, 'index');
-    
 });
 
 QUnit.test('TestMatchParams', function (assert) {
@@ -787,7 +785,7 @@ QUnit.asyncTest('TestUpdateAfterLoad', function (assert) {
                 assert.strictEqual(router.view().name, 'home');
 
                 QUnit.start();
-                router.destroy();
+                router.dispose();
             }, 1);
         },1)
     },1)
@@ -1150,12 +1148,18 @@ QUnit.test('TestAddViews', function (assert) {
     var view3 = router.getView('view3');
     assert.ok(view3);
 
-    assert.throws(function () {
-        router.addViews([
-            { name: 'view4', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
-        ]);
-    });
+    router.addViews([
+        { name: 'view4', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+    ]);
 
+    var view4 = router.getView('view4');
+    assert.ok(view4);
+
+    //assert.throws(function () {
+    //    router.addViews([
+    //        { name: 'view4', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+    //    ]);
+    //});
 });
 
 QUnit.asyncTest('TestAddRoutes', function (assert) {
@@ -1186,11 +1190,11 @@ QUnit.asyncTest('TestAddRoutes', function (assert) {
     router.init();
 
     assert.throws(function () {
-       router.addRoutes([]);
+       router.addRoutes();
     });
 
     assert.throws(function () {
-        router.insertRoutes([]);
+        router.insertRoutes();
     });
 
     var router2 = new ko.route.ViewRouter({
@@ -1225,7 +1229,7 @@ QUnit.asyncTest('TestAddRoutes', function (assert) {
     }, 1);
 });
 
-QUnit.test('TestInitRoutes', function (assert) {
+QUnit.test('TestInit', function (assert) {
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
     var router = new ko.route.ViewRouter({
@@ -1242,7 +1246,7 @@ QUnit.test('TestInitRoutes', function (assert) {
     expect(2);
 
     assert.throws(function () {
-        router.resolve({ view: 'home' });
+        router.resolve({ foo: 'home' });
     });
 
     router.init();
@@ -1267,21 +1271,17 @@ QUnit.test('TestClearRoutes', function (assert) {
 
     expect(2);
         
-    router.initRoutes();
+    router.init();
 
     assert.strictEqual( router.resolve({ view: 'home' }), 'home');
-
-    router.clearRoutes();    
+    router.clearRoutes();
     router.addRoutes([
         {
             template: '{view}/{action?}/{id?}',
             defaults: { view: 'home', action: 'foo' }
         }
     ]);
-    router.initRoutes();
-
     assert.strictEqual( router.resolve({ view: 'home' }), 'home/foo');
-
 });
 
 QUnit.asyncTest('TestTemplateLoadUnload', function (assert) {
@@ -1442,4 +1442,22 @@ QUnit.test('TestBinding', function (assert) {
     assert.strictEqual($content.text(), 'Template1Content');
     router.view().activeTemplateID('template2');
     assert.strictEqual($content.text(), 'Template2Content');
+});
+
+QUnit.test('TestAddTemplates', function (assert) {
+    var addedView;
+    var router = new ko.route.ViewRouter({
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider()
+    });
+
+    expect(2);
+
+    assert.equal(router.getView('view1'), null);
+    
+    router.addViews([
+        addedView = { name: 'view1', model: {}, templateID: 'template1' }
+    ]);
+
+    assert.strictEqual('view1', router.getView('view1').name);
 });
