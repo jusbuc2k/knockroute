@@ -1,5 +1,5 @@
 ﻿/*
- * knockroute v0.9.0
+ * knockroute v0.9.1
  * https://github.com/jusbuc2k/knockroute
  * 
  * Copyright (c) 2014 Justin R. Buchanan
@@ -18,7 +18,7 @@
     
     // Object that will be exported
     var kr = {
-        version: '0.9.0'
+        version: '0.9.1'
     };
 
     // Export everthing attached to kr into ko.route
@@ -929,6 +929,54 @@
 
     //#endregion
 
+    //#region Message Bus
+
+    function Bus() {
+        var self = this;
+        this._channels = {};
+        this._subs = [];
+    };
+
+    Bus.prototype.publish = function (channel, topic, message) {
+        if (this._channels[channel]) {
+            this._channels[channel].notifySubscribers(message, topic);
+        }
+    };
+
+    Bus.prototype.subscribe = function (channel, topic, callback) {
+        var self = this;
+
+        this._channels[channel] = this._channels[channel] || new ko.subscribable();
+
+        var disposable = {
+            subscription: self._channels[channel].subscribe(callback, self, topic),
+            dispose: function() {
+                this.subscription.dispose();
+                if (self._channels[channel] && self._channels[channel].getSubscriptionsCount() <= 0) {
+                    self._channels[channel] = null;
+                }
+            }
+        };
+
+        this._subs.push(disposable);
+
+        return disposable;
+    };
+
+    Bus.prototype.dispose = function () {
+        while (this._subs.length > 0) {
+            this._subs.pop().dispose();
+        }
+    };
+
+    // global shared instance
+    Bus.default = new Bus();
+
+    kr.Bus = Bus;
+
+    //#endregion
+   
+
     //#region View Router
 
     function ViewRouter(options) {
@@ -1332,6 +1380,8 @@
 
         self.modelFactory = new DefaultModelFactory();
 
+        self.bus = new kr.Bus();
+
         //#endregion
 
         //#region Public Methods.
@@ -1579,10 +1629,11 @@
             return this.pathProvider.decorate(path);
         }
 
-        self.navigate = function (routeValues) {
+        self.navigate = function (routeValues, ignoreCurrent) {
             /// <signature>
             /// <summary>Navigates to a path represented by the given route values.</summary>
             /// <param name="routeValues" type="Object">A collection of route values.</param>
+            /// <param name="ignoreCurrent" type="Boolean">Don't include route values for current path.</param>
             /// </signature>
             /// <signature>
             /// <summary>Navigates to the given path.</summary>
@@ -1590,10 +1641,10 @@
             /// </signature>            
             var path;
 
-            if (typeof routeValues === 'string') {
+            if (typeof routeValues === 'string' && arguments.length === 1) {
                 path = routeValues;
             } else {
-                path = self.resolve(routeValues)
+                path = self.resolve(routeValues, ignoreCurrent);
             }
 
             if (path != null) {

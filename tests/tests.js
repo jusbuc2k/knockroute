@@ -146,6 +146,33 @@ QUnit.test('events', function (assert) {
     btn.click();
 });
 
+QUnit.module('Bus');
+
+QUnit.test('TestBus', function (assert) {
+    var lastMessage = null;
+    var sub = ko.route.Bus.default.subscribe('chan1', 'top1', function (data) {
+        lastMessage = data;
+    });
+
+    expect(5);
+
+    ko.route.Bus.default.publish('chan1', 'top1', 'Message1');
+    assert.strictEqual(lastMessage, 'Message1');    
+    ko.route.Bus.default.publish('chan1', 'top1', 'Message2');
+    assert.strictEqual(lastMessage, 'Message2');
+    
+    ko.route.Bus.default.publish('chan1', 'top2', 'FooBar');
+    assert.strictEqual(lastMessage, 'Message2');
+    ko.route.Bus.default.publish('chan2', 'top1', 'FooBar');
+    assert.strictEqual(lastMessage, 'Message2');
+
+    sub.dispose();
+    ko.route.Bus.default.publish('chan1', 'top1', 'Message3');
+    assert.strictEqual(lastMessage, 'Message2');
+
+    ko.route.Bus.default.dispose();
+});
+
 QUnit.module('View');
 
 QUnit.module('Route');
