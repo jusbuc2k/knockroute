@@ -1,4 +1,13 @@
-﻿; (function (global, ko) {
+﻿/*
+ * knockroute v0.9.0
+ * https://github.com/jusbuc2k/knockroute
+ * 
+ * Copyright (c) 2014 Justin R. Buchanan
+ * Licensed under the MIT license; see LICENSE.
+ * 
+ */
+
+; (function (global, ko) {
     "use strict";
 
     //#region Dependencies
@@ -8,7 +17,9 @@
     //#endregion
     
     // Object that will be exported
-    var kr = {};
+    var kr = {
+        version: '0.9.0'
+    };
 
     // Export everthing attached to kr into ko.route
     function extendKo() {
