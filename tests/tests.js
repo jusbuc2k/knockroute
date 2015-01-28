@@ -1488,3 +1488,33 @@ QUnit.test('TestAddTemplates', function (assert) {
 
     assert.strictEqual('view1', router.getView('view1').name);
 });
+
+QUnit.asyncTest('TestDefaultPathProvider', function (assert) {
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' }
+        ],
+        templateProvider: new FakeTemplateProvider()
+    });
+    var viewChanged = 0;
+
+    expect(3);
+
+    router.view.subscribe(function (view) {
+        viewChanged++;
+
+        if (viewChanged === 2) {
+            assert.strictEqual(view.templateID, 'template1');
+        } else if (viewChanged === 1) {
+            assert.strictEqual(view.content, 'Loading...');
+        }
+    });
+
+    router.init();
+
+    window.setTimeout(function () {
+        assert.strictEqual(viewChanged, 2);
+
+        QUnit.start();
+    }, 1);    
+});

@@ -1374,8 +1374,10 @@
         //#region public properties
         
         // Gets or sets the path provider
-        self.pathProvider = new kr.HashPathStringProvider();
+        self.pathProvider = null;
 
+        setPathProvider(new kr.HashPathStringProvider());
+        
         self.templateProvider = new kr.DefaultTemplateProvider();
 
         self.modelFactory = new DefaultModelFactory();
