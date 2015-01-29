@@ -204,7 +204,7 @@
     };
 
     // Invokes the disposalCallback.
-    Disposable.prototype.dipose = function () {
+    Disposable.prototype.dispose = function () {
         if (!this.isDisposed) {
             this.disposalCallback();
             this.isDisposed = true;

@@ -63,65 +63,6 @@ QUnit.test('queryString', function (assert) {
     assert.strictEqual(ko.route.utils.serializeQueryString(qs), 'foo=bar&beer=nuts');
 });
 
-QUnit.asyncTest('nowOrThen', function (assert) {
-    expect(5);
-    QUnit.stop(4);
-
-    var resultOK = function (result) {
-        assert.strictEqual(result, true);
-        QUnit.start();
-    };
-
-    var resultFail = function(result){
-        assert.strictEqual(result, false);
-        QUnit.start();
-    };
-
-    ko.route.utils.nowOrThen(true).then(resultOK, resultOK);
-
-    ko.route.utils.nowOrThen(false).then(resultFail, resultFail);
-
-    ko.route.utils.nowOrThen(new Promise(function (resolve) {
-        resolve(true);
-    })).then(resultOK, resultOK);
-
-    var jqdOK = {
-        done: function (fn) {
-            fn(true);
-            return this;
-        },
-        fail: function (fn) {
-            return this;
-        }
-    };
-
-    var jqdOKTest = function (args) {
-        assert.ok(args && args[0] === true);
-        QUnit.start();
-    };
-
-    ko.route.utils.nowOrThen(jqdOK).then(jqdOKTest, jqdOKTest);
-
-    var jqdFail = {
-        done: function (fn) {
-            return this;
-        },
-        fail: function (fn) {
-            fn(false);
-            return this;
-        }
-    };
-
-    var jqdFailTest = function (args) {
-        assert.ok(args && args[0] === false);
-        QUnit.start();
-    };
-
-    ko.route.utils.nowOrThen(jqdFail).then(jqdFailTest, jqdFailTest).then(null, function(){
-        QUnit.start();
-    });
-});
-
 QUnit.test('setTextContent', function (assert) {
     expect(1);
 
