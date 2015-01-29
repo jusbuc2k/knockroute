@@ -39,13 +39,11 @@
     //#region Private Utils
 
     function trim(s) {
-        kr.utils.trim = function (s) {
-            return s.replace(rtrim, '');
-        }
+        return s.replace(rtrim, '');
     }
 
     function isTrue(element, attribute) {
-        return trim(((element.getAttribute(attribute) || '').toLowerCase()) === 'true');
+        return trim((element.getAttribute(attribute) || '').toLowerCase()) === 'true';
     }
 
     function isArray(obj) {
@@ -147,30 +145,6 @@
         return pairs.join('&');
     }
 
-    kr.utils.nowOrThen = function (result) {
-        return new Promise(function (resolve, reject) {
-            if (typeof result === 'boolean') {
-                if (result) {
-                    resolve(result);
-                } else {
-                    reject(result)
-                }
-            } else if (result != null && typeof result.done === 'function') {
-                result.done(function () {
-                    resolve(arguments);
-                }).fail(function () {
-                    reject(arguments);
-                });
-            } else if (result != null && typeof result.then === 'function') {
-                result.then(resolve, reject);
-            } else if (result != null) {
-                resolve(result);
-            } else {
-                resolve();
-            }
-        });       
-    };
-
     kr.utils.attachEvent = function (element, event, handler) {
         if (element.addEventListener) {
             element.addEventListener(event, handler, false);
@@ -219,6 +193,24 @@
         }
     };
     
+    //#endregion
+
+    //#region Disposable
+
+    // Creates an instance of an object that calls the disposalCallback when the dispose method is invoked.
+    function Disposable(disposalCallback) {
+        this.isDisposed = false;
+        this.disposalCallback = disposalCallback;
+    };
+
+    // Invokes the disposalCallback.
+    Disposable.prototype.dipose = function () {
+        if (!this.isDisposed) {
+            this.disposalCallback();
+            this.isDisposed = true;
+        }
+    };
+
     //#endregion
 
     //#region Route
@@ -948,16 +940,15 @@
 
         this._channels[channel] = this._channels[channel] || new ko.subscribable();
 
-        var disposable = {
-            subscription: self._channels[channel].subscribe(callback, self, topic),
-            dispose: function() {
-                this.subscription.dispose();
-                if (self._channels[channel] && self._channels[channel].getSubscriptionsCount() <= 0) {
-                    self._channels[channel] = null;
-                }
+        var sub = self._channels[channel].subscribe(callback, self, topic);
+        var disposable = new Disposable(function () {
+            sub.dispose();
+            ko.utils.arrayRemoveItem(self._subs, disposable);
+            if (self._channels[channel] && self._channels[channel].getSubscriptionsCount() <= 0) {
+                self._channels[channel] = null;
             }
-        };
-
+        });
+        
         this._subs.push(disposable);
 
         return disposable;
@@ -976,7 +967,6 @@
 
     //#endregion
    
-
     //#region View Router
 
     function ViewRouter(options) {
