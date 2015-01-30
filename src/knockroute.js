@@ -1,12 +1,4 @@
-﻿/*
- * knockroute v0.9.1
- * https://github.com/jusbuc2k/knockroute
- * 
- * Copyright (c) 2014 Justin R. Buchanan
- * Licensed under the MIT license; see LICENSE.
- * 
- */
-
+﻿
 ; (function (global, ko) {
     "use strict";
 
@@ -18,7 +10,7 @@
     
     // Object that will be exported
     var kr = {
-        version: '0.9.1'
+        version: '0.9.2-alpha'
     };
 
     // Export everthing attached to kr into ko.route
@@ -231,6 +223,7 @@
 
     // Static: Parses a route segment value into the given data type
     Route.parseSegmentValue = function (value, type) {
+        value = decodeURIComponent(value);
         switch (type) {
             case 'float': return parseFloat(value);
             case 'int': return parseInt(value, 10);
@@ -449,6 +442,11 @@
         var currentSegment;
         var routeSegment;
         var routePart;
+        var encodeBefore = Number.MAX_VALUE;
+
+        if (typeof currentPath === 'string') {
+            currentPath = decodeURI(currentPath);
+        }
 
         if (currentPath != null) {
             if (currentPath[0] === this.options.pathSeperator) {
@@ -489,8 +487,9 @@
                 } else if (routePart.type === 'params' && i == this.segments.length - 1) {
                     var params = routeValues[routePart.name];
                     if (params) {
-                        params = params.join(this.options.pathSeperator);
+                        params = params.map(encodeURIComponent).join(this.options.pathSeperator);
                         if (params.length) {
+                            encodeBefore = pathParts.length;
                             pathParts.push(params);
                         }
                     }
@@ -511,7 +510,13 @@
             return null;
         }
 
-        return pathParts.join(this.options.pathSeperator);
+        return pathParts.map(function(item,index){
+            if (index < encodeBefore) {
+                return encodeURIComponent(item);
+            } else {
+                return item;
+            }
+        }).join(this.options.pathSeperator);
     };
 
     // Returns true if the given key is defined in a route segment of this route, false otherwise.

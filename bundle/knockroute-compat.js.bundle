@@ -10,7 +10,9 @@
   </settings>
   <!--The order of the <file> elements determines the order of the files in the bundle.-->
   <files>
+    <file>/src/header.js</file>
     <file>/lib/es6-promise.js</file>
+    <file>/lib/Array.map.js</file>
     <file>/src/knockroute.js</file>
   </files>
 </bundle>

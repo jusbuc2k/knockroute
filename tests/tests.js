@@ -2,6 +2,9 @@
 /// <reference path="http://code.jquery.com/jquery-1.11.0.min.js" />
 /// <reference path="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js" />
 /// <reference path="../src/knockroute.js" />
+/// <reference path="../lib/es6-promise.js" />
+
+ES6Promise.polyfill();
 
 var orig = window.location.href;
 
@@ -13,14 +16,14 @@ QUnit.done(function () {
 
 QUnit.module('Utils');
 
-QUnit.test('Promise', function (assert) {
+QUnit.test('Browser has promise support or polyfill', function (assert) {
     expect(2);
 
     assert.ok(typeof Promise, 'function');
     assert.strictEqual(typeof Promise.all, 'function');
 });
 
-QUnit.test('defaults', function (assert) {
+QUnit.test('ko.route.utils.defaults', function (assert) {
     expect(4);
 
      var defaults = {
@@ -40,7 +43,7 @@ QUnit.test('defaults', function (assert) {
      assert.strictEqual(options.c, 8);
 });
 
-QUnit.test('queryString', function (assert) {
+QUnit.test('ko.route.utils.queryString', function (assert) {
     expect(13);
 
     var qs;
@@ -63,7 +66,7 @@ QUnit.test('queryString', function (assert) {
     assert.strictEqual(ko.route.utils.serializeQueryString(qs), 'foo=bar&beer=nuts');
 });
 
-QUnit.test('setTextContent', function (assert) {
+QUnit.test('ko.route.utils.setTextContent', function (assert) {
     expect(1);
 
     ko.route.utils.setTextContent($('#qunit-fixture')[0], 'This is a test');
@@ -71,7 +74,7 @@ QUnit.test('setTextContent', function (assert) {
     assert.strictEqual($('#qunit-fixture').text(), 'This is a test');    
 });
 
-QUnit.test('events', function (assert) {
+QUnit.test('ko.route.utils.attachEvent', function (assert) {
     expect(1);
 
     var btn = document.createElement('button');
@@ -87,9 +90,9 @@ QUnit.test('events', function (assert) {
     btn.click();
 });
 
-QUnit.module('Bus');
+QUnit.module('ko.route.Bus');
 
-QUnit.test('TestBus', function (assert) {
+QUnit.test('Bus sub/pub.', function (assert) {
     var lastMessage = null;
     var sub = ko.route.Bus.default.subscribe('chan1', 'top1', function (data) {
         lastMessage = data;
@@ -114,11 +117,9 @@ QUnit.test('TestBus', function (assert) {
     ko.route.Bus.default.dispose();
 });
 
-QUnit.module('View');
+QUnit.module('ko.route.Route');
 
-QUnit.module('Route');
-
-QUnit.test('TestParseRoute', function(assert) {
+QUnit.test('ko.route.Route parse init from string', function(assert) {
     expect(7);
 
     var valueChars = '[\\w\\.\\-\\$\\s\\{\\}\\|\\^\\*\\(\\)\\[\\]]+';
@@ -127,7 +128,7 @@ QUnit.test('TestParseRoute', function(assert) {
     var goodRoute = new ko.route.Route('{view}');
     //assert.strictEqual(goodRoute.regex, '^/?(' + valueChars + ')' + suffix);
     assert.strictEqual(goodRoute.segments.length, 1);
-    
+            
     assert.throws(function () {
         var badRoute = new ko.route.Route('/{view');        
     });
@@ -158,7 +159,7 @@ QUnit.test('TestParseRoute', function(assert) {
     });    
 });
 
-QUnit.test('TestMatch', function (assert) {
+QUnit.test('ko.route.Route.match', function (assert) {
     expect(22);
 
     var rv;
@@ -204,7 +205,7 @@ QUnit.test('TestMatch', function (assert) {
     assert.strictEqual(rv.view, 'index');
 });
 
-QUnit.test('TestMatchParams', function (assert) {
+QUnit.test('ko.route.Route match params type', function (assert) {
     expect(15);
 
     var rv;
@@ -230,7 +231,7 @@ QUnit.test('TestMatchParams', function (assert) {
 
 });
 
-QUnit.test('TestResolveParams', function (assert) {
+QUnit.test('ko.route.Route.resolve', function (assert) {
     expect(11);
 
     var rv;
@@ -250,7 +251,7 @@ QUnit.test('TestResolveParams', function (assert) {
     assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['a', 'b', 'c'] }), 'foobar/a/b/c');
 });
 
-QUnit.test('TestMatchWithContraints', function (assert) {
+QUnit.test('ko.route.Route.match with constraints', function (assert) {
     expect(7);
 
     var rv;
@@ -267,7 +268,7 @@ QUnit.test('TestMatchWithContraints', function (assert) {
     
 });
 
-QUnit.test('TestMatchWithDataTypeParsing', function (assert) {
+QUnit.test('ko.route.Route.match data types', function (assert) {
     expect(9);
     var rv;
 
@@ -283,7 +284,7 @@ QUnit.test('TestMatchWithDataTypeParsing', function (assert) {
     assert.strictEqual(rv.bar, parseInt('0f9ab1', 16));    
 });
 
-QUnit.test('TestOptionalKeys', function (assert) {
+QUnit.test('ko.route.Route.match optionals', function (assert) {
     expect(4);
 
     var path = '/Foo/';
@@ -297,7 +298,7 @@ QUnit.test('TestOptionalKeys', function (assert) {
     assert.strictEqual(rv.view, 'Foo');                
 });
 
-QUnit.test('TestResolvePath', function (assert) {
+QUnit.test('ko.route.Route.resolve', function (assert) {
     expect(8);
 
     assert.strictEqual(new ko.route.Route('{foo}/{bar}').resolve({ foo: 'blah', bar: 'test' }), 'blah/test');
@@ -312,7 +313,7 @@ QUnit.test('TestResolvePath', function (assert) {
 
 });
 
-QUnit.test('TestRouteWithBasePath', function (assert) {
+QUnit.test('ko.route.Route.match with wildcard base', function (assert) {
     expect(2);
 
     var path = '/Foo/Bar/Baz/123';
@@ -323,7 +324,7 @@ QUnit.test('TestRouteWithBasePath', function (assert) {
     assert.strictEqual(rv.id, 123);   
 });
 
-QUnit.test('TestRouteSpecialCharacters', function (assert) {
+QUnit.test('ko.route.Route special character handling', function (assert) {
     expect(6);
 
     var path = 'a b c/d*ef/[123]/9{9}9/t$x$t/';
@@ -337,7 +338,7 @@ QUnit.test('TestRouteSpecialCharacters', function (assert) {
     assert.strictEqual(rv.ext, 't$x$t');    
 });
 
-QUnit.test('TestRouteWithQueryString', function (assert) {
+QUnit.test('ko.route.Route.match with Querystring', function (assert) {
     expect(3);
 
     var path = '/Foo/123?id=456&foo=bar';
@@ -349,7 +350,7 @@ QUnit.test('TestRouteWithQueryString', function (assert) {
     assert.strictEqual(rv.id, '123');
 });
 
-QUnit.test('TestRouteValuesEqual', function (assert) {
+QUnit.test('ko.route.Route.match with extra path info', function (assert) {
     expect(2);
 
     var rv1 = new ko.route.Route('/*/*/{view}/{id:int}').match('/Foo/Bar/Baz/123');
@@ -361,6 +362,24 @@ QUnit.test('TestRouteValuesEqual', function (assert) {
     var rv2 = new ko.route.Route('/{view}/{id}').match('/Foo/Bar/Cat/456');
 
     assert.strictEqual(JSON.stringify(rv1), JSON.stringify(rv2));
+});
+
+QUnit.test('ko.route.Route.match/resolve URI Encoding', function (assert) {
+    var route = new ko.route.Route('{foo}/{bar}');    
+    var rvIn = {
+        foo: 'abc 123\r\n!@#$%^&*()_',
+        bar: '\t-+=[]{}|\<>,./?;:\'"~`'
+    };
+    var rvOut;
+    var path;
+    expect(3);
+
+    path = route.resolve(rvIn);
+    rvOut = route.match(path);
+    
+    assert.strictEqual(path, 'abc%20123%0D%0A!%40%23%24%25%5E%26*()_/%09-%2B%3D%5B%5D%7B%7D%7C%3C%3E%2C.%2F%3F%3B%3A\'%22~%60');
+    assert.strictEqual(rvOut.foo, rvIn.foo);
+    assert.strictEqual(rvOut.bar, rvIn.bar);
 });
 
 QUnit.module('Providers');
