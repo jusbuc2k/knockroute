@@ -1725,7 +1725,7 @@
                     kr.utils.setTextContent(element, '<h2>Error</h2><p>Something went wrong when trying to display content.</p>');
                     return;
                 } else if (updatedView.content && updatedView.modelInstance && updatedView.modelInstance.error) {
-                    kr.utils.setTextContent(element, '<h2>Error</h2><p>' + updatedView.content + '</p><p>' + (updatedView.modelInstance.error.stack) ? updatedView.modelInstance.error.stack : '' + '</p>');
+                    kr.utils.setTextContent(element, '<h2>Error</h2><p>' + updatedView.content + '</p><p>' + (updatedView.modelInstance.error.stack ? updatedView.modelInstance.error.stack : '') + '</p>');
                     return;
                 } else if (updatedView.content) {
                     kr.utils.setTextContent(element, updatedView.content);
