@@ -206,20 +206,28 @@ QUnit.test('ko.route.Route.match', function (assert) {
 });
 
 QUnit.test('ko.route.Route match params type', function (assert) {
-    expect(15);
+    expect(21);
 
     var rv;
     var route1 = new ko.route.Route('{view}/{rest:params}');
     assert.ok(rv = route1.match('foobar'), 'Path should match');
     assert.strictEqual(rv.view, 'foobar');
     assert.strictEqual(rv.rest, undefined);
-
+    
     assert.ok(rv = route1.match('foobar/a/b/c'), 'Path should match');    
     assert.strictEqual(rv.view, 'foobar');
     assert.strictEqual(rv.rest.length, 3);
     assert.strictEqual(rv.rest[0], 'a');
     assert.strictEqual(rv.rest[1], 'b');
     assert.strictEqual(rv.rest[2], 'c');
+
+    assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['abc', 'a/b', 'def'] }), 'foobar/abc/a%2Fb/def');
+    rv = route1.match('foobar/abc/a%2Fb/def');
+    assert.strictEqual(rv.view, 'foobar');
+    assert.strictEqual(rv.rest.length, 3);
+    assert.strictEqual(rv.rest[0], 'abc');
+    assert.strictEqual(rv.rest[1], 'a/b');
+    assert.strictEqual(rv.rest[2], 'def');
 
     var route2 = new ko.route.Route('{view}/{id?}/{rest:params?}');
     assert.ok(rv = route2.match('foobar'), 'Path should match');
@@ -228,7 +236,6 @@ QUnit.test('ko.route.Route match params type', function (assert) {
     assert.strictEqual(rv.id, '123');
     assert.ok(rv = route2.match('foobar/123/a/b/c'), 'Path should match');
     assert.strictEqual(rv.rest.length, 3);
-
 });
 
 QUnit.test('ko.route.Route.resolve', function (assert) {
@@ -661,17 +668,17 @@ QUnit.test('TestResolve', function (assert) {
             createTemplates: true
         }),
         routes: [
-            {
-                template: '{area=bean}/{view}/{action?}/{id?}',
-                defaults: { area: 'bean', view: 'default', action: 'index' },
-            },
-            {
-                template: '{area=curd}/{view}/{action?}/{id?}',
-                defaults: { area: 'curd', view: 'default', action: 'index' },
-            },
+            //{
+            //    template: '{area=bean}/{view}/{action?}/{id?}',
+            //    defaults: { area: 'bean', view: 'default', action: 'index' },
+            //},
+            //{
+            //    template: '{area=curd}/{view}/{action?}/{id?}',
+            //    defaults: { area: 'curd', view: 'default', action: 'index' },
+            //},
             {
                 template: '{view}/{action?}/{id?}',
-                defaults: { view: 'default', action: 'index' },
+                defaults: { view: 'default', action: 'index' }
             }
         ]
     });

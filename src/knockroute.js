@@ -376,7 +376,7 @@
                 } else if (part.type === 'params' && this.segments.length - 1 == i) {
                     // if the params is in the last position, we parse combine all remaining path segments into an array
 
-                    routeValues[part.name] = pathSegments.slice(i);
+                    routeValues[part.name] = pathSegments.slice(i).map(decodeURIComponent);
 
                     // we are done processing segments
                     break;
@@ -443,12 +443,8 @@
         var routeSegment;
         var routePart;
         var encodeBefore = Number.MAX_VALUE;
-
-        if (typeof currentPath === 'string') {
-            currentPath = decodeURI(currentPath);
-        }
-
-        if (currentPath != null) {
+                
+        if (typeof currentPath === 'string' && currentPath.length > 0) {
             if (currentPath[0] === this.options.pathSeperator) {
                 currentPath = currentPath.slice(1);
             }
@@ -457,7 +453,7 @@
 
         for (var i = 0; i < this.segments.length; i++) {
             routeSegment = this.segments[i];
-            currentSegment = currentPathSegements ? currentPathSegements[i] : null;
+            currentSegment = (currentPathSegements && currentPathSegements[i]) ? decodeURI(currentPathSegements[i]) : null;
 
             if (routeSegment.parts.length === 1) {
                 routePart = routeSegment.parts[0];
