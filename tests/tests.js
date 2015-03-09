@@ -745,8 +745,9 @@ QUnit.asyncTest('TestUpdateAfterLoad', function (assert) {
             self.id = routeValues.id;
         };
 
-        self.unload = function () {
+        self.unload = function () {            
             assert.ok(loaded, 'load should be called before unload');
+            loaded = false;
         };
     };
     
@@ -810,11 +811,11 @@ QUnit.asyncTest('TestListDetailScenario', function (assert) {
             return true;
         };
 
-        self.update = function (routeValues) {
-            self.load(routeValues);
+        self.update = function (routeValues) {            
+            self.load(routeValues); 
         };
 
-        self.unload = function (e) {
+        self.unload = function (e) {            
         };
 
     };

@@ -1073,22 +1073,19 @@
             ]);
         }
 
-        function executeModelUnload(view, force) {
-            function dispose() {
-                if (force || !view.singleton) {
-                    if (view.modelInstance != null && typeof view.modelInstance.dispose === 'function') {
-                        view.modelInstance.dispose.apply(view.modelInstance);
-                    }
-                    view.modelInstance = null;
-                }
-            }
-
+        function executeModelUnload(view) {
             if (view.modelInstance != null && typeof view.modelInstance.unload === 'function') {
-                return Promise.resolve(view.modelInstance.unload.apply(view.modelInstance, [force])).then(dispose);
+                return view.modelInstance.unload.apply(view.modelInstance);
             } else {
-                dispose();
-                return Promise.resolve(true);
+                return true;
             }
+        }
+
+        function executeModelDispose(view) {
+            if (!view.singleton && view.modelInstance != null && typeof view.modelInstance.dispose === 'function') {
+                view.modelInstance.dispose.apply(view.modelInstance);
+                view.modelInstance = null;
+            }            
         }
 
         function setCurrent(view, routeValues, cancel) {
@@ -1116,17 +1113,13 @@
             }
 
             try {
+                // dispose the old view model
+                executeModelDispose(currentView());
 
-                // If the view is changing, we need to unload the existing model, unload the existing template, and load the new template
-                waits.push(executeModelUnload(currentView(), false).then(function (result) {
-                    if (result === false) {
-                        cancel();
-                    }
-                    if (currentView().activeTemplateID() && currentView().activeTemplateID() !== view.templateID) {
-                        self.templateProvider.unloadTemplate(currentView().activeTemplateID());
-                        //currentView().activeTemplateID(null);
-                    }
-                }));
+                // unload the old template
+                if (currentView().activeTemplateID() && currentView().activeTemplateID() !== view.templateID) {
+                    self.templateProvider.unloadTemplate(currentView().activeTemplateID());
+                }
 
                 waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function () {
                     return executeModelAction(view, options.updateMethodName, routeValues);
@@ -1140,7 +1133,8 @@
             return Promise.all(waits)
                 .then(aborter)
                 ['catch'](function (reason) {
-                    aborter = null;                    
+                    aborter = null;
+                    console.log('catch reason', reason);
                     if (reason !== 'abort') {                        
                         handleError('Error', options.errorTemplateID, reason, routeValues);
                     }
@@ -1282,22 +1276,27 @@
             var ctx = getMatchingViewAndRouteValues(path);
             var view;
 
-            if (ctx == null) {
-                handleError('NotFound', options.notFoundTemplateID, 'Path not found');
-                return;
-            }
+            var cancel = function () {
+                self.pathProvider.stop();
+                self.pathProvider.revert(function () {
+                    self.pathProvider.start();
+                });
+            };
 
-            if (ctx.view === currentView()) {
+            if (ctx != null && ctx.view === currentView()) {
                 executeModelAction(ctx.view, options.updateMethodName, ctx.routeValues)['catch'](function (reason) {
                     handleError('Error', options.errorTemplateID, reason, ctx.routeValues);
-                });                
-            } else {
-                setCurrent(ctx.view, ctx.routeValues, function () {
-                    self.pathProvider.stop();
-                    self.pathProvider.revert(function () {
-                        self.pathProvider.start();
-                    });
                 });
+            } else {
+                // If the view is changing, we need to unload the existing model, unload the existing template, and load the new template
+                if (executeModelUnload(currentView()) === false){
+                    cancel();
+                } else if (ctx == null) {
+                    handleError('NotFound', options.notFoundTemplateID, 'Path not found');
+                    return;
+                } else {
+                    setCurrent(ctx.view, ctx.routeValues);
+                }
             }
         }
 
@@ -1657,6 +1656,7 @@
         // Disposes the router and all related resources, or at least, in theory it does.
         self.dispose = function () {
             self.pathProvider.stop();
+            var currentViewDisposed = false;
 
             if (pathChangedEvent) {
                 pathChangedEvent.dispose();
@@ -1664,11 +1664,18 @@
             }
 
             for (var i = 0; i < views.length; i++) {
-                executeModelUnload(views[i], true);
+                executeModelDispose(views[i]);
+                if (views[i] === currentView()) {
+                    currentViewDisposed = true;
+                }
             }
 
-            executeModelUnload(currentView(), true);
-            currentView(defaultView);
+            if (!currentViewDisposed) {
+                executeModelUnload(currentView());
+                executeModelDispose(currentView());
+            }
+
+            currentView(null);
         };
 
         // Initializes the router. This method can only be called once, and if called again it will do nothing.

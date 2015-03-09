@@ -169,6 +169,7 @@
             this.company = ko.observable();
             this.email = ko.observable();
             this.phone = ko.observable();
+            this.isEditing = ko.observable(false);
 
             this.editUrl = ko.computed(function () {
                 return router.resolve({ view: 'detail', id: self.personID(), action: 'edit' });
@@ -176,6 +177,8 @@
             
             self.save = function () {                                
                 exampleDataService.savePerson(self.personID(), ko.toJS(self));
+
+                this.isEditing(false);
 
                 router.navigate({ view: 'detail', action: 'view' });
             };
@@ -204,9 +207,20 @@
                 return true;
             };
 
+            self.unload = function () {
+                if (this.isEditing()) {
+                    if (!confirm('You will lose your changes')) {
+                        return false;
+                    }
+                }
+            };
+
             self.update = function (routeValues, actionContext) {
                 if (routeValues.action === 'edit') {
                     actionContext.setTemplate('editTemplate');
+                    this.isEditing(true);
+                } else {
+                    this.isEditing(false);
                 }
             };
         }
