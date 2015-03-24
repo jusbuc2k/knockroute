@@ -1082,8 +1082,10 @@
         }
 
         function executeModelDispose(view) {
-            if (!view.singleton && view.modelInstance != null && typeof view.modelInstance.dispose === 'function') {
-                view.modelInstance.dispose.apply(view.modelInstance);
+            if (!view.singleton && view.modelInstance != null) {
+                if (typeof view.modelInstance.dispose === 'function') {
+                    view.modelInstance.dispose.apply(view.modelInstance);
+                }
                 view.modelInstance = null;
             }            
         }

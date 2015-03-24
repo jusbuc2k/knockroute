@@ -1486,3 +1486,69 @@ QUnit.asyncTest('TestDefaultPathProvider', function (assert) {
         QUnit.start();
     }, 1);    
 });
+
+QUnit.asyncTest('TestUnloadDisposesNonSingletonModels', function (assert) {
+    expect(2);
+
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+    var sub;
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1' },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    router.init();
+
+    window.setTimeout(function () {
+        var curView = router.view();
+
+        assert.ok(curView.modelInstance != null);
+
+        router.pathProvider.fakeChange('view1/Justin');
+        window.setTimeout(function () {
+            assert.ok(curView.modelInstance == null);
+            QUnit.start();
+        });
+    });    
+});
+
+QUnit.asyncTest('TestUnloadDoesNotDisposeSingletonModels', function (assert) {
+    expect(2);
+
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+    var sub;
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', singleton: true },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    router.init();
+
+    window.setTimeout(function () {
+        var curView = router.view();
+
+        assert.ok(curView.modelInstance != null);
+
+        router.pathProvider.fakeChange('view1/Justin');
+        window.setTimeout(function () {
+            assert.ok(curView.modelInstance != null);
+            QUnit.start();
+        });
+    });
+});
