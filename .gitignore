@@ -11,3 +11,4 @@ dist
 Web.config
 vwd.webinfo
 .\Scripts
+.vs/config/applicationhost.config

@@ -1552,3 +1552,36 @@ QUnit.asyncTest('TestUnloadDoesNotDisposeSingletonModels', function (assert) {
         });
     });
 });
+
+QUnit.asyncTest('TestScrollPositionResetsWhenViewChanges', function (assert) {
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template-tall', templateSrc: 'talltemplate.html'},
+            { name: 'view1', model: TestModel, templateID: 'template-tall', templateSrc: 'talltemplate.html' }
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    router.init();
+
+    expect(3);
+   
+    window.setTimeout(function () {
+        assert.strictEqual(window.document.body.scrollTop, 0);
+        window.scroll(0, 1000);
+        assert.strictEqual(window.document.body.scrollTop, 100);
+
+        router.navigate({ view: 'view1' });
+
+        window.setTimeout(function () {
+
+            assert.strictEqual(window.document.body.scrollTop, 0);
+
+            QUnit.start();
+        });
+    });
+});

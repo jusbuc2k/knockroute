@@ -11,22 +11,31 @@
     <script type="text/html" id="listTemplate">
         <h1>KnockRoute Example 1</h1>
         <h2>List of Persons</h2>
+
         <p>
             <a href="#/foobar">This should trigger a ViewNotFound</a>
             <a href="#/foobar/test/blah/foo">This should trigger a NotFound</a>
             <a href="#/home/?error=123">This should throw an error.</a>
         </p>
+
+        <button data-bind="click: loadList">Load Data</button>
+
         <ul data-bind="foreach: list">
             <li>
                 <span data-bind="text: firstName"></span>
                 <span data-bind="text: lastName"></span>
                 <a href="#" data-bind="attr: {href: '#/detail/'+personID}">View</a>
             </li>
-        </ul>        
+        </ul>
+
+        <p>
+            <a href="#/other/">Some other page</a>
+        </p>
+
     </script>
 
     <script type="text/html" id="detailTemplate">
-        <h1>KnockRoute Example 1</h1>        
+        <h1>KnockRoute Example 1</h1>
 
         <h2>Peson Detail</h2>
 
@@ -67,7 +76,7 @@
         <ul>
             <li>
                 <label>First Name:</label>
-                <input type="text" data-bind="value: firstName" style="width: 200px"/>
+                <input type="text" data-bind="value: firstName" style="width: 200px" />
             </li>
             <li>
                 <label>Last Name:</label>
@@ -93,6 +102,16 @@
         </p>
     </script>
 
+    <script type="text/html" id="otherTemplate">
+        <h1>Some other page</h1>
+
+        <h2>Edit Person Detail</h2>
+
+        <p>This is the contents of some other page</p>
+
+        <a href="#/home/">Back to List</a>
+    </script>
+
     <script id="notFoundTemplate" type="text/html">
         <h1>Not Found</h1>
         <p>The path was not found.</p>
@@ -108,7 +127,7 @@
     </script>
 
     <script>
-        
+
         //TODO: make this service an example of an ajax call using a promise
         var exampleDataService = {
             getPersonByID: function (id) {
@@ -127,10 +146,12 @@
         }
 
         function HostModel() {
+
             this.router = new ko.route.ViewRouter({
                 views: [
-                    { name: 'home', model: ListModel, templateID: 'listTemplate' },
-                    { name: 'detail', model: DetailModel, templateID: 'detailTemplate' }
+                    { name: 'home', model: ListModel, templateID: 'listTemplate', singleton: true, scope: 'list-detail' },
+                    { name: 'detail', model: DetailModel, templateID: 'detailTemplate', scope: 'list-detail' },
+                    { name: 'other', model: OtherModel, templateID: 'otherTemplate' }
                 ],
                 routes: [
                    {
@@ -145,9 +166,13 @@
 
         function ListModel() {
             var self = this;
-            this.list = ko.observableArray(EXAMPLE_DATA);
+            this.list = ko.observableArray();
 
-            this.load = function (routeValues) {                
+            this.loadList = function () {
+                self.list(EXAMPLE_DATA);
+            };
+
+            this.load = function (routeValues) {
                 return true;
             };
 
@@ -174,8 +199,8 @@
             this.editUrl = ko.computed(function () {
                 return router.resolve({ view: 'detail', id: self.personID(), action: 'edit' });
             });
-            
-            self.save = function () {                                
+
+            self.save = function () {
                 exampleDataService.savePerson(self.personID(), ko.toJS(self));
 
                 this.isEditing(false);
@@ -225,11 +250,21 @@
             };
         }
 
+        function OtherModel() {
+            var self = this;
+
+            self.load = function () {
+                return true;
+            }
+        }
+
         ; (function () {
             var host = new HostModel();
             ko.applyBindings(host);
         })();
     </script>
 </body>
+
+
 
 </html>

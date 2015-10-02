@@ -911,7 +911,9 @@
             templateSrc: null,
             templatePersist: false,
             singleton: false,
-            content: null
+            resetScroll: true,
+            content: null,
+            scope: null
         };
 
         ko.utils.extend(self, kr.utils.defaults(defaultProps, attributes || {}));
@@ -1073,22 +1075,55 @@
             ]);
         }
 
-        function executeModelUnload(view) {
+        function executeModelUnload(view, navigationContext) {
+
+            self.onUnload.notifySubscribers({
+                context: this,
+                routeValues: navigationContext.routeValues,
+                navigation: navigationContext
+            });
+
+            if (navigationContext.isCancelled) {
+                return;
+            }
+
+            // invoke the view's onModelCreating callback
+            if (typeof view.onModelUnloading === 'function') {
+                view.onModelUnloading.apply(view, [navigationContext.routeValues, view.modelInstance, navigationContext]);
+            }
+
+            if (navigationContext.isCancelled) {
+                return;
+            }
+
             if (view.modelInstance != null && typeof view.modelInstance.unload === 'function') {
-                return view.modelInstance.unload.apply(view.modelInstance);
-            } else {
-                return true;
+                if (view.modelInstance.unload.apply(view.modelInstance, [navigationContext.routeValues, navigationContext]) === false) {
+                    navigationContext.cancel();
+                };
             }
         }
 
         function executeModelDispose(view) {
-            if (!view.singleton && view.modelInstance != null) {
+            if (view.singleton === true) {
+                return;
+            }
+
+            if (view.modelInstance != null) {
                 if (typeof view.modelInstance.dispose === 'function') {
                     view.modelInstance.dispose.apply(view.modelInstance);
                 }
-                view.modelInstance = null;
-            }            
+            }           
         }
+
+        function disposeScope(newView) {
+            var i;
+            for (i = 0; i < views.length; i++) {
+                if (views[i] !== newView && views[i].modelInstance != null && views[i].scope != null && views[i].scope !== newView.scope) {
+                    executeModelDispose(views[i], newView);
+                }
+            }
+        }
+
 
         function setCurrent(view, routeValues, cancel) {
             var model;
@@ -1099,17 +1134,37 @@
             }
             
             aborter = kr.utils.abortable(function () {
+                if (!(view.resetScroll === false)) {
+                    window.scrollTo(0, 0);
+                }
                 currentView(view);
                 aborter = null;
-                self.onLoaded.notifySubscribers({ routeValues: routeValues, context: this });
+                self.onLoaded.notifySubscribers({
+                    routeValues: routeValues,
+                    navigation: navigationContext,
+                    context: this
+                });
             });
 
+            // invoke the view's onModelCreating callback
+            if (typeof view.onModelCreating === 'function') {
+                view.onModelCreating.apply(view, [routeValues, navigationContext]);
+            }
+
+            // If the modelInstance property is set, use the saved model instance
+            // Otherwise use the model property, otherwise use an empty object as the model
             model = view.modelInstance || view.model || {};
 
-            self.onLoading.notifySubscribers({ routeValues: routeValues, context: this });
+            self.onLoading.notifySubscribers({
+                routeValues: routeValues,
+                navigation: navigationContext,
+                context: this
+            });
 
+            // If the model is a constructor function, create a new instance
             if (typeof model === 'function') {
                 view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
+            // otherwise the model is an object instance, which should be used as the model
             } else {
                 view.modelInstance = model;
             }
@@ -1117,10 +1172,19 @@
             try {
                 // dispose the old view model
                 executeModelDispose(currentView());
+                disposeScope(view);
 
-                // unload the old template
-                if (currentView().activeTemplateID() && currentView().activeTemplateID() !== view.templateID) {
-                    self.templateProvider.unloadTemplate(currentView().activeTemplateID());
+                if (!navigationContext.isPreventDisposeSet) {
+                    executeModelDispose(oldView);
+                }
+
+                if (!oldView.singleton && !navigationContext.isPersistModelSet) {
+                    oldView.modelInstance = null;
+                }
+
+                // unload the old template if it is not the same as the new one
+                if (oldView.activeTemplateID() && oldView.activeTemplateID() !== view.templateID) {
+                    self.templateProvider.unloadTemplate(oldView.activeTemplateID());
                 }
 
                 waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function () {
@@ -1275,8 +1339,25 @@
 
         function onPathChanged(path) {
             /// <param name="path" type="String"></param>
-            var ctx = getMatchingViewAndRouteValues(path);
-            var view;
+            var viewMatch = getMatchingViewAndRouteValues(path);
+
+            var ctx = {
+                path: path,
+                // Cancel the navigation
+                isCancelled: false,                
+                cancel: function () {
+                    this.isCancelled = true;
+                },
+                // Persist the existing model when navigating to the new view
+                isPersistModelSet: false,
+                persistModel: function () {
+                    this.isPersistModelSet = true;
+                },
+                isPreventDisposeSet: false,
+                preventDispose: function () {
+                    this.isPreventDisposeSet = true;
+                }
+            };
 
             var cancel = function () {
                 self.pathProvider.stop();
@@ -1285,19 +1366,31 @@
                 });
             };
 
-            if (ctx != null && ctx.view === currentView()) {
-                executeModelAction(ctx.view, options.updateMethodName, ctx.routeValues)['catch'](function (reason) {
+            if (viewMatch == null) {
+                ctx.routeValues = null;                
+            } else {
+                ctx.routeValues = viewMatch.routeValues;
+                ctx.view = viewMatch.view;
+            }
+            
+            if (viewMatch != null && viewMatch.view === currentView()) {
+                executeModelAction(viewMatch.view, options.updateMethodName, viewMatch.routeValues)['catch'](function (reason) {
                     handleError('Error', options.errorTemplateID, reason, ctx.routeValues);
                 });
             } else {
-                // If the view is changing, we need to unload the existing model, unload the existing template, and load the new template
-                if (executeModelUnload(currentView()) === false){
+                // If the view is changing, we need to invoke unload on the existing model, 
+                executeModelUnload(currentView(), ctx);
+
+                // If the unload method cancelled the navigation then revert to the previous path
+                if (ctx.isCancelled) {
                     cancel();
-                } else if (ctx == null) {
+                // else if the new path doesn't match any defined route or view, show an error
+                } else if (viewMatch == null) {
                     handleError('NotFound', options.notFoundTemplateID, 'Path not found');
                     return;
+                // else set the new view as the current view
                 } else {
-                    setCurrent(ctx.view, ctx.routeValues);
+                    setCurrent(viewMatch.view, viewMatch.routeValues, ctx);
                 }
             }
         }
@@ -1388,6 +1481,7 @@
         // Clears all existing route table entries.
         self.clearRoutes = function () {
             kr.utils.clearArray(routes);
+            kr.utils.clearArray(areaRoutes);
         };
 
         // Clears all existing views and areas.
@@ -1423,8 +1517,8 @@
                         });
                     } else {
                         areaRoutes.push({
-                            route: new kr.Route('{area=' + area.name + '}/' + options.routes[0].template),
-                            defaults: ko.utils.extend({ area: area.name }, options.routes[0].defaults)
+                            route: new kr.Route('{area=' + area.name + '}/' + routes[0].route.routeTemplate),
+                            defaults: ko.utils.extend({ area: area.name }, routes[0].defaults)
                         });
                     }
                 });
@@ -1587,6 +1681,7 @@
             var nvc = {};
             var hasQuery = false;
             var match;
+            var currentRouteValues;
 
             if (!ignoreCurrent) {
                 currentPath = self.pathProvider.getPath();
@@ -1600,6 +1695,12 @@
                         
             if (match == null) {
                 throw 'No matching route for given path';
+            }
+
+            if (!ignoreCurrent) {
+                currentRouteValues = match.route.match(currentPath);
+                kr.utils.extend(currentRouteValues, kr.utils.parseQueryString(currentPath));
+                routeValues = kr.utils.extend(currentRouteValues, routeValues);
             }
 
             for (var key in routeValues) {
@@ -1694,6 +1795,8 @@
         self.onLoading = new ko.subscribable();
 
         self.onLoaded = new ko.subscribable();
+
+        self.onUnload = new ko.subscribable();
 
         self.onLoadError = new ko.subscribable();
 
