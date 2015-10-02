@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd">
     <metadata>
         <id>knockroute</id>
-        <version>0.9.4-alpha1</version>
+        <version>0.9.5-alpha1</version>
         <title>Knockroute - Router &amp; lazy template loader for Knockout</title>
         <authors>Justin R. Buchanan</authors>
         <licenseUrl>https://raw.githubusercontent.com/jusbuc2k/knockroute/master/LICENSE</licenseUrl>
