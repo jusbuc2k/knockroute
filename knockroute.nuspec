@@ -14,11 +14,9 @@
         </dependencies>
     </metadata>
     <files>
-        <file src="bundle\knockroute-compat.js" target="content\Scripts\knockroute-compat.js" />
-        <file src="bundle\knockroute-compat.min.js" target="content\Scripts\knockroute-compat.min.js" />
-        <file src="bundle\knockroute-compat.min.js.map" target="content\Scripts\knockroute-compat.min.js.map" />
-        <file src="bundle\knockroute.js" target="content\Scripts\knockroute.js" />
-        <file src="bundle\knockroute.min.js" target="content\Scripts\knockroute.min.js" />
-        <file src="bundle\knockroute.min.js.map" target="content\Scripts\knockroute.min.js.map" />
+        <file src="dist\knockroute-compat.js" target="content\Scripts\knockroute-compat.js" />
+        <file src="dist\knockroute-compat.min.js" target="content\Scripts\knockroute-compat.min.js" />        
+        <file src="dist\knockroute.js" target="content\Scripts\knockroute.js" />
+        <file src="dist\knockroute.min.js" target="content\Scripts\knockroute.min.js" />        
     </files>
 </package>
