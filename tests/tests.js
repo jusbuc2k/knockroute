@@ -1,8 +1,8 @@
 ﻿/// <reference path="http://code.jquery.com/qunit/qunit-1.14.0.js" />
 /// <reference path="http://code.jquery.com/jquery-1.11.0.min.js" />
 /// <reference path="http://ajax.aspnetcdn.com/ajax/knockout/knockout-3.0.0.js" />
-/// <reference path="../src/knockroute.js" />
 /// <reference path="../lib/es6-promise.js" />
+/// <reference path="../src/knockroute.js" />
 
 ES6Promise.polyfill();
 
@@ -239,7 +239,7 @@ QUnit.test('ko.route.Route match params type', function (assert) {
 });
 
 QUnit.test('ko.route.Route.resolve', function (assert) {
-    expect(11);
+    expect(25);
 
     var rv;
     var route1 = new ko.route.Route('{view}/{rest:params}');
@@ -249,13 +249,30 @@ QUnit.test('ko.route.Route.resolve', function (assert) {
     assert.strictEqual(rv.rest[0], 'a');
     assert.strictEqual(rv.rest[1], 'b');
     assert.strictEqual(rv.rest[2], 'c');
-
     
     assert.strictEqual(route1.resolve(rv), 'foobar/a/b/c');
     assert.strictEqual(route1.resolve({ view: 'foobar', rest: [] }), 'foobar');
     assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['a'] }), 'foobar/a');
     assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['a', 'b'] }), 'foobar/a/b');
     assert.strictEqual(route1.resolve({ view: 'foobar', rest: ['a', 'b', 'c'] }), 'foobar/a/b/c');
+
+    assert.strictEqual(new ko.route.Route('{foo}/{bar}').resolve({ foo: 'blah', bar: 'test' }), 'blah/test');
+    assert.strictEqual(new ko.route.Route('{foo}/{bar?}').resolve({ foo: 123, bar: 456 }), '123/456');
+    assert.strictEqual(new ko.route.Route('{foo}/{bar?}').resolve({ foo: 123 }), '123');
+
+    assert.ok(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }) == null);
+    assert.ok(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, '') == null);
+    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer'), 'Beer/123');
+    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer/Blah/'), 'Beer/123');
+    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, '/Beer/Blah/'), 'Beer/123');
+
+    assert.strictEqual(new ko.route.Route("{area}/{view}/{id?}").resolve({ area: 'foo', view: 'bar' }), 'foo/bar');
+    assert.strictEqual(new ko.route.Route("{area}/{view}/{id?}").resolve({ area: 'foo', view: 'bar', id: 123 }), 'foo/bar/123');
+    
+    assert.strictEqual(new ko.route.Route("{area}/{view}/{id?}").resolve({ view: 'zip' }, 'foo/bar'), 'foo/zip', 'Current path should fill in missing segments');
+    assert.strictEqual(new ko.route.Route("{area}/{view}/{id?}").resolve({ view: 'zip', id: 123 }, 'foo/bar'), 'foo/zip/123', 'Current path should fill in missing segments');
+    assert.strictEqual(new ko.route.Route("{area}/{view}/{id?}").resolve({ view: 'zip' }, 'foo/bar/123'), 'foo/zip', 'Current path should only fill segments before the first changed segment.');
+    assert.strictEqual(new ko.route.Route("{area}/{view}/{id?}").resolve({ area: 'baz' }, 'foo/bar/123'), null, 'Current path should only fill segments before the first changed segment.');
 });
 
 QUnit.test('ko.route.Route.match with constraints', function (assert) {
@@ -273,6 +290,30 @@ QUnit.test('ko.route.Route.match with constraints', function (assert) {
     assert.strictEqual(rv.view, 'foobar');
     assert.strictEqual(rv.foo, 'bar');    
     
+});
+
+QUnit.test('ko.route.Route.resolve with constraints', function (assert) {
+    expect(11);
+
+    var rv;
+    var route1 = new ko.route.Route('{view}/{foo=bar}');
+    assert.ok(route1.resolve({ view: 'blah', foo: 'bar' }), 'Path should match');    
+    assert.equal(route1.resolve({ view: 'blah', foo: 'poop' }), null, 'Path should NOT match because of constraint');
+    assert.equal(route1.resolve({ view: 'blah' }), null, 'Path should NOT match because of requirement');
+
+    route1 = new ko.route.Route('{view}/{foo=bar?}');
+    assert.ok(route1.resolve({ view: 'blah', foo: 'bar' }), 'Path should match');
+    assert.equal(route1.resolve({ view: 'blah', foo: 'poop' }), null, 'Path should NOT match because of constraint');
+    assert.equal(route1.resolve({ view: 'blah' }), 'blah', 'Path should match because foo is optional');
+
+    route1 = new ko.route.Route('{view}/{foo=bar}');
+    assert.equal(route1.resolve({ foo: 'bar' }, 'blah'), 'blah/bar', 'Path should match');
+    assert.equal(route1.resolve({ foo: 'poop' }, 'blah'), null, 'Path should NOT match because of constraint');
+
+    route1 = new ko.route.Route('{view}/{foo=bar?}');
+    assert.equal(route1.resolve({ foo: 'bar' }, 'blah'), 'blah/bar', 'Path should match');
+    assert.equal(route1.resolve({ foo: 'poop' }, 'blah'), null, 'Path should NOT match because of constraint');
+    assert.equal(route1.resolve({}, 'blah'), 'blah', 'Path should match because foo is optional');
 });
 
 QUnit.test('ko.route.Route.match data types', function (assert) {
@@ -303,21 +344,6 @@ QUnit.test('ko.route.Route.match optionals', function (assert) {
 
     assert.ok(rv = route.match(path));
     assert.strictEqual(rv.view, 'Foo');                
-});
-
-QUnit.test('ko.route.Route.resolve', function (assert) {
-    expect(8);
-
-    assert.strictEqual(new ko.route.Route('{foo}/{bar}').resolve({ foo: 'blah', bar: 'test' }), 'blah/test');
-    assert.strictEqual(new ko.route.Route('{foo}/{bar?}').resolve({ foo: 123, bar: 456 }),'123/456');
-    assert.strictEqual(new ko.route.Route('{foo}/{bar?}').resolve({ foo: 123 }), '123');
-
-    assert.ok(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }) == null);
-    assert.ok(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, '') == null);
-    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer'), 'Beer/123');
-    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, 'Beer/Blah/'), 'Beer/123');
-    assert.strictEqual(new ko.route.Route('*/{foo}/').resolve({ foo: 123 }, '/Beer/Blah/'), 'Beer/123');
-
 });
 
 QUnit.test('ko.route.Route.match with wildcard base', function (assert) {
@@ -613,6 +639,16 @@ function TestModel($router) {
     };
 };
 
+function FakeScrollProvider(callback){
+    this._callback = callback;
+}
+
+FakeScrollProvider.prototype.resetScroll = function(){
+    if (typeof this._callback === 'function'){
+        this._callback();
+    }
+};
+
 //#endregion
 
 QUnit.asyncTest('TestInitialize', function(assert) {
@@ -668,14 +704,6 @@ QUnit.test('TestResolve', function (assert) {
             createTemplates: true
         }),
         routes: [
-            //{
-            //    template: '{area=bean}/{view}/{action?}/{id?}',
-            //    defaults: { area: 'bean', view: 'default', action: 'index' },
-            //},
-            //{
-            //    template: '{area=curd}/{view}/{action?}/{id?}',
-            //    defaults: { area: 'curd', view: 'default', action: 'index' },
-            //},
             {
                 template: '{view}/{action?}/{id?}',
                 defaults: { view: 'default', action: 'index' }
@@ -689,6 +717,70 @@ QUnit.test('TestResolve', function (assert) {
     router.pathProvider.setPath('bean/default');
     assert.strictEqual(router.resolve({ view: 'foo', action: 'bar' }), 'bean/foo/bar');
     
+});
+
+QUnit.test('TestResolveComplexRoutes', function (assert) {
+    expect(7);
+
+    $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1' },
+            { name: 'about', model: TestModel, templateID: 'template1' },
+            { name: 'home', area: 'bean', model: TestModel, templateID: 'template1' },
+            { name: 'about', area: 'bean', model: TestModel, templateID: 'template1' },
+            { name: 'home', area: 'curd', model: TestModel, templateID: 'template1' },
+            { name: 'about', area: 'curd', model: TestModel, templateID: 'template1' },
+        ],
+        areas: [
+            {
+                name: 'bean',
+                routes: [
+                    {
+                        template: '{view}/{id?}',
+                        defaults: { view: 'home' }
+                    }
+                ]
+            },
+            {
+                name: 'curd',
+                routes: [
+                    {
+                        template: '{view}/{id?}',
+                        defaults: { view: 'home' }
+                    },
+                    {
+                        template: '{foo}/{view}/{id?}',
+                        defaults: { view: 'home' }
+                    }
+                ]
+            }
+        ],
+        pathProvider: new FakePathProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        }),
+        routes: [
+            {
+                template: '{view}/{id?}',
+                defaults: { view: 'home' }
+            }
+        ]
+    });
+
+    router.init();
+
+    assert.strictEqual(router.resolve({ view: 'home' }), 'home');
+
+    assert.strictEqual(router.resolve({ view: 'home' }), 'home');
+    assert.strictEqual(router.resolve({ view: 'about' }), 'about');
+    assert.strictEqual(router.resolve({ view: 'about', id: 123 }), 'about/123');
+
+    assert.strictEqual(router.resolve({ view: 'home', area: 'bean' }), 'bean/home');
+    assert.strictEqual(router.resolve({ view: 'home', area: 'curd' }), 'curd/home');
+    assert.strictEqual(router.resolve({ view: 'home', area: 'curd', foo: 'poop' }), 'curd/poop/home');
 });
 
 QUnit.asyncTest('TestRespondToPathChanges', function (assert) {
@@ -871,7 +963,7 @@ QUnit.asyncTest('TestListDetailScenario', function (assert) {
                     assert.strictEqual(router.view().modelInstance.dateLoaded(), listLoaded);
                     assert.strictEqual(router.view().modelInstance.list().length, 10);
 
-                    router.navigate({ view: 'home' });
+                    router.navigate({ view: 'home' }, true);
                     window.setTimeout(function () {
                         assert.strictEqual(router.view().modelInstance.list().length, 0);
                         QUnit.start();
@@ -1554,12 +1646,19 @@ QUnit.asyncTest('TestUnloadDoesNotDisposeSingletonModels', function (assert) {
 });
 
 QUnit.asyncTest('TestScrollPositionResetsWhenViewChanges', function (assert) {
+    var resetScrollCalled = false;
+
     var router = new ko.route.ViewRouter({
         views: [
-            { name: 'home', model: TestModel, templateID: 'template-tall', templateSrc: 'talltemplate.html'},
-            { name: 'view1', model: TestModel, templateID: 'template-tall', templateSrc: 'talltemplate.html' }
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' },
+            { name: 'view2', model: TestModel, templateID: 'template3', templateSrc: 'template.html', resetScroll: false },
         ],
         pathProvider: new FakePathProvider(),
+        scrollProvider: new FakeScrollProvider(function(){
+            // called when resetScroll is invoked
+            resetScrollCalled = true;
+        }),
         templateProvider: new FakeTemplateProvider({
             templateContainer: $('#qunit-fixture')[0],
             createTemplates: true
@@ -1568,20 +1667,101 @@ QUnit.asyncTest('TestScrollPositionResetsWhenViewChanges', function (assert) {
 
     router.init();
 
-    expect(3);
-   
     window.setTimeout(function () {
-        assert.strictEqual(window.document.body.scrollTop, 0);
-        window.scroll(0, 1000);
-        assert.strictEqual(window.document.body.scrollTop, 100);
+        // called because the first view (home) resets scroll
+        assert.strictEqual(resetScrollCalled, true);
 
         router.navigate({ view: 'view1' });
-
         window.setTimeout(function () {
+            assert.strictEqual(resetScrollCalled, true);
+            resetScrollCalled = false;
 
-            assert.strictEqual(window.document.body.scrollTop, 0);
-
-            QUnit.start();
+            router.navigate({ view: 'view2' });            
+            window.setTimeout(function () {
+                assert.strictEqual(resetScrollCalled, false);
+                QUnit.start();
+            });
         });
     });
+});
+
+QUnit.asyncTest('TestViewCallbacksFire', function (assert) {
+    var modelCreating = function (routeValues, navContext) {
+        assert.ok(routeValues != null);
+        assert.ok(navContext != null);
+        assert.strictEqual(typeof navContext.cancel, 'function');
+        assert.strictEqual(typeof navContext.persistModel, 'function');
+        assert.strictEqual(typeof navContext.preventDispose, 'function');
+    };
+
+    var modelUnloading = function (routeValues, modelInstance, navContext) {
+        assert.ok(routeValues != null);
+        assert.ok(modelInstance != null);
+        assert.ok(navContext != null);
+        assert.strictEqual(typeof navContext.cancel, 'function');
+        assert.strictEqual(typeof navContext.persistModel, 'function');
+        assert.strictEqual(typeof navContext.preventDispose, 'function');
+    };
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html', onModelCreating: modelCreating, onModelUnloading: modelUnloading },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+        ],
+        pathProvider: new FakePathProvider(),
+        scrollProvider: new FakeScrollProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    expect(11);
+
+    router.init();
+
+    window.setTimeout(function () {
+        router.navigate({ view: 'view1' });
+        window.setTimeout(function () {
+            QUnit.start();
+        });
+    },10);
+});
+
+QUnit.asyncTest('TestCancelPathChange', function (assert) {
+    var modelCreating = function (routeValues, navContext) {
+        throw 'Should not be hit because cancelled';        
+    };
+
+    var modelUnloading = function (routeValues, modelInstance, navContext) {
+        assert.strictEqual(navContext.isCancelled, false);
+        navContext.cancel();
+        assert.strictEqual(navContext.isCancelled, true);
+    };
+
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html', onModelUnloading: modelUnloading },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html', onModelCreating: modelCreating }
+        ],
+        pathProvider: new FakePathProvider(),
+        scrollProvider: new FakeScrollProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    expect(3);
+
+    router.init();
+
+    window.setTimeout(function () {
+        router.navigate({ view: 'view1' });
+        window.setTimeout(function () {
+            // should be blank because the modelUnloading callback cancels the event
+            assert.strictEqual(router.pathProvider.getPath(), '');
+            QUnit.start();
+        }, 10);
+    }, 10);
 });

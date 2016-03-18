@@ -5,12 +5,12 @@
     //#region Dependencies
 
     var Promise = global.Promise || global.ES6Promise.Promise;
-    
+
     //#endregion
-    
+
     // Object that will be exported
     var kr = {
-        version: '0.9.5-alpha'
+        version: '0.9.9-alpha1'
     };
 
     // Export everthing attached to kr into ko.route
@@ -78,12 +78,22 @@
         }
     }
 
+    function defaultViewResolver(routerContext, routeValues) {
+        if (routeValues[routerContext.areaRouteKey]) {
+            return routerContext.router.getView(routeValues[routerContext.viewRouteKey], routeValues[routerContext.areaRouteKey]);
+        } else {
+            return routerContext.router.getView(routeValues[routerContext.viewRouteKey]);
+        }
+    }
+
+    kr.defaultViewResolver = defaultViewResolver;
+
     //#endregion
 
     //#region Public Utils
 
     kr.utils = kr.utils || {};
-    
+
     kr.utils.clearArray = function (array) {
         while (array.length > 0) {
             array.pop();
@@ -114,7 +124,7 @@
             for (var i = 0; i < tokens.length; i++) {
                 pair = tokens[i].split("=");
                 if (pair.length === 2) {
-                    pairs[pair[0]] = pair[1];
+                    pairs[pair[0]] = decodeURIComponent(pair[1]);
                     count++;
                 }
             }
@@ -184,7 +194,7 @@
             element.innerText = textContent;
         }
     };
-    
+
     //#endregion
 
     //#region Disposable
@@ -443,7 +453,8 @@
         var routeSegment;
         var routePart;
         var encodeBefore = Number.MAX_VALUE;
-                
+        var ignoreCurrentPath = false;
+
         if (typeof currentPath === 'string' && currentPath.length > 0) {
             if (currentPath[0] === this.options.pathSeperator) {
                 currentPath = currentPath.slice(1);
@@ -467,14 +478,25 @@
                     pathParts.push(routePart.name);
                 } else if (routePart.type === 'parameter') {
                     if (routeValues.hasOwnProperty(routePart.name)) {
-                        pathParts.push(routeValues[routePart.name]);
-                    } else if (currentSegment && currentSegment.length > 0 && (routePart.constraint == null || routePart.constraint(currentSegment))) {
+                        ignoreCurrentPath = true;
+
+                        if ((routePart.constraint == null || routePart.constraint(routeValues[routePart.name]))) {
+                            pathParts.push(routeValues[routePart.name]);
+                        } else {
+                            return null;
+                        }
+                    } else if (!ignoreCurrentPath && currentSegment && currentSegment.length > 0) {
                         // the current segment value is not given in route values, but rather given by the current path
                         // this handles the case where an area is not given on routeValues, but the current path
                         // includes the area, so that you can write router.resolve({view:'foo'}) instead of having 
                         // to write router.resolve({area:'bar',view:'foo'})
                         // when the current URL already includes the area
-                        pathParts.push(currentSegment);
+
+                        if ((routePart.constraint == null || routePart.constraint(currentSegment))) {
+                            pathParts.push(currentSegment);
+                        } else {
+                            return null;
+                        }
                     } else if (routePart.optional) {
 
                     } else {
@@ -494,7 +516,7 @@
                 throw 'Multi-part route segments are not supported.';
             }
         }
-       
+
         var requiredCount = 0;
         ko.utils.arrayForEach(this.segments, function (cur) {
             if (!cur.parts[0].optional) {
@@ -506,7 +528,7 @@
             return null;
         }
 
-        return pathParts.map(function(item,index){
+        return pathParts.map(function (item, index) {
             if (index < encodeBefore) {
                 return encodeURIComponent(item);
             } else {
@@ -516,7 +538,7 @@
     };
 
     // Returns true if the given key is defined in a route segment of this route, false otherwise.
-    Route.prototype.hasKey = function (key) {        
+    Route.prototype.hasKey = function (key) {
         for (var x = 0; x < this.segments.length; x++) {
             for (var y = 0; y < this.segments[x].parts.length; y++) {
                 if (this.segments[x].parts[y].name === key) {
@@ -583,6 +605,7 @@
 
         // Sets the path value to the previous value.
         self.revert = function (callback) {
+            //TODO: Should this just to window.history.back()? Pros/cons if so?
             self.setPath(lastPath);
             if (typeof callback === 'function') {
                 window.setTimeout(callback, 20);
@@ -699,7 +722,7 @@
     function DefaultTemplateProvider() {
         var self = this;
     }
-    
+
     DefaultTemplateProvider.prototype.loadTemplate = function (view) {
         ///<summary>Loads the given template, and returns a promise that will resolve when the template is loaded.</summary>
         ///<param name="view" type="kr.View">A view object with template information or a template object</param>
@@ -734,7 +757,7 @@
 
         //TODO: Should this do something? Should the DefaultTemplateProvider exist, or should it be none?
     };
-    
+
     kr.DefaultTemplateProvider = DefaultTemplateProvider;
 
     function AjaxTemplateProvider(options) {
@@ -770,7 +793,7 @@
             template = window.document.createElement("script");
             template.type = "text/html";
             template.id = view.templateID;
-            if (this.options.cache) {
+            if (!this.options.cache) {
                 template.setAttribute("data-src", view.templateSrc + '?v=' + new Date().getTime().toString());
             } else {
                 template.setAttribute("data-src", view.templateSrc);
@@ -857,6 +880,16 @@
         kr.AjaxTemplateProvider = AjaxTemplateProvider;
     }
 
+    function WindowScrollProvider() {
+
+    }
+
+    WindowScrollProvider.prototype.resetScroll = function () {
+        window.scrollTo(0, 0);
+    };
+
+    kr.WindowScrollProvider = WindowScrollProvider;
+
     //#endregion
 
     //#region Area
@@ -911,9 +944,12 @@
             templateSrc: null,
             templatePersist: false,
             singleton: false,
-            resetScroll: true,
             content: null,
-            scope: null
+            scope: null,
+            resetScroll: true,
+            onModelCreating: null,
+            onModelUnloading: null,
+            handler: null // If handler is defined, routeValues are passed to the handler, and the view is not displayed.
         };
 
         ko.utils.extend(self, kr.utils.defaults(defaultProps, attributes || {}));
@@ -951,7 +987,7 @@
                 self._channels[channel] = null;
             }
         });
-        
+
         this._subs.push(disposable);
 
         return disposable;
@@ -969,7 +1005,7 @@
     kr.Bus = Bus;
 
     //#endregion
-   
+
     //#region View Router
 
     function ViewRouter(options) {
@@ -1001,10 +1037,12 @@
             updateMethodName: 'update',
             pathProvider: 'hash',
             templateProvider: 'default',
+            scrollProvider: 'window',
             defaultContent: 'Loading...', // Content to display before init
             defaultTemplateID: '',
             errorTemplateID: '',
-            notFoundTemplateID: ''                 
+            notFoundTemplateID: '',
+            viewResolver: defaultViewResolver
         };
 
         var initialized = false;
@@ -1012,7 +1050,7 @@
         var routes = [];
         var areaRoutes = [];
         var areas = [];
-        var views = [];    
+        var views = [];
         var pathChangedEvent;
         var aborter = null;
         var defaultView;
@@ -1026,7 +1064,7 @@
         });
 
         //#region Privates
-        
+
         // Gets or sets the current view
         var currentView = ko.observable(defaultView);
 
@@ -1038,7 +1076,7 @@
 
             var actionContext = {
                 cancel: function () {
-                    
+
                 },
                 setTemplate: function (templateID) {
                     if (canSetTemplate) {
@@ -1050,11 +1088,11 @@
             };
 
             if (view.modelInstance && typeof view.modelInstance[actionName] === 'function') {
-                p = Promise.resolve(view.modelInstance[actionName].apply(view.modelInstance, [routeValues, actionContext]));                
+                p = Promise.resolve(view.modelInstance[actionName].apply(view.modelInstance, [routeValues, actionContext]));
             } else {
                 p = Promise.resolve(null);
             }
-                 
+
             // The template can only be set in the syncronus code of the 
             // model action method (e.g. load or update), that is, before the method returns
             // a promise or a value.
@@ -1112,7 +1150,7 @@
                 if (typeof view.modelInstance.dispose === 'function') {
                     view.modelInstance.dispose.apply(view.modelInstance);
                 }
-            }           
+            }
         }
 
         function disposeScope(newView) {
@@ -1124,21 +1162,24 @@
             }
         }
 
-
-        function setCurrent(view, routeValues, cancel) {
+        function setCurrent(view, routeValues, navigationContext) {
             var model;
             var waits = [];
+            var oldView = currentView();
+            var thereWasAlreadyAnError = false;
 
             if (aborter) {
                 aborter.abort('abort');
             }
-            
+
             aborter = kr.utils.abortable(function () {
-                if (!(view.resetScroll === false)) {
-                    window.scrollTo(0, 0);
-                }
                 currentView(view);
                 aborter = null;
+
+                if (!(view.resetScroll === false)) {
+                    self.scrollProvider.resetScroll();
+                }
+
                 self.onLoaded.notifySubscribers({
                     routeValues: routeValues,
                     navigation: navigationContext,
@@ -1164,18 +1205,15 @@
             // If the model is a constructor function, create a new instance
             if (typeof model === 'function') {
                 view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
-            // otherwise the model is an object instance, which should be used as the model
+                // otherwise the model is an object instance, which should be used as the model
             } else {
                 view.modelInstance = model;
             }
 
             try {
-                // dispose the old view model
-                executeModelDispose(currentView());
-                disposeScope(view);
-
                 if (!navigationContext.isPreventDisposeSet) {
                     executeModelDispose(oldView);
+                    disposeScope(view);
                 }
 
                 if (!oldView.singleton && !navigationContext.isPersistModelSet) {
@@ -1190,7 +1228,6 @@
                 waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function () {
                     return executeModelAction(view, options.updateMethodName, routeValues);
                 }));
-
             } catch (e) {
                 handleError('Error', options.errorTemplateID, e, routeValues);
                 return Promise.reject(e);
@@ -1200,9 +1237,9 @@
                 .then(aborter)
                 ['catch'](function (reason) {
                     aborter = null;
-                    console.log('catch reason', reason);
-                    if (reason !== 'abort') {                        
-                        handleError('Error', options.errorTemplateID, reason, routeValues);
+                    if (reason !== 'abort' && !thereWasAlreadyAnError) {
+                        thereWasAlreadyAnError = true;
+                        handleError('Error', options.errorTemplateID, reason, routeValues)
                     }
                 }
             );
@@ -1220,18 +1257,19 @@
             return self.templateProvider.loadTemplate(tmpl);
         }
 
-        function findFirstMatchingRoute(path, routes){
+        function findFirstMatchingRoute(path, routes) {
             var i;
             var view;
             var rv;
 
-            for (i = 0; i < routes.length; i++){
+            // search least specific to most specific
+            for (i = 0; i < routes.length; i++) {
                 if (rv = routes[i].route.match(path, routes[i].defaults)) {
-                    if (rv[options.areaRouteKey]) {
-                        view = self.getView(rv[options.viewRouteKey], rv[options.areaRouteKey]);
-                    } else {
-                        view = self.getView(rv[options.viewRouteKey]);
-                    }
+                    view = options.viewResolver.call(null, {
+                        areaRouteKey: options.areaRouteKey,
+                        viewRouteKey: options.viewRouteKey,
+                        router: self
+                    }, rv);
 
                     if (view == null) {
                         continue;
@@ -1239,7 +1277,8 @@
 
                     return {
                         view: view,
-                        routeValues: rv
+                        routeValues: rv,
+                        route: routes[i]
                     };
                 }
             }
@@ -1253,14 +1292,16 @@
             var route;
             var defaults;
 
-            for (i = 0; i < routes.length; i++) {
+            // search most specific to least specific
+            for (i = routes.length - 1; i >= 0 ; i--) {
                 if (tmp = routes[i].route.resolve(routeValues, path)) {
                     route = routes[i].route;
                     defaults = routes[i].defaults;
 
-                    if (routeValues[options.areaRouteKey] && (!defaults[options.areaRouteKey] || !self.getArea(defaults[options.areaRouteKey]))) {
-                        continue;
-                    }
+                    //TODO: REMOVE THIS STUFF
+                    //if (routeValues[options.areaRouteKey] && (!defaults[options.areaRouteKey] || !self.getArea(defaults[options.areaRouteKey]))) {
+                    //    continue;
+                    //}
 
                     return {
                         route: route,
@@ -1274,7 +1315,7 @@
 
         function getMatchingViewAndRouteValues(path) {
             var rv;
-            var qs;            
+            var qs;
             var match;
 
             match = findFirstMatchingRoute(path, areaRoutes);
@@ -1287,21 +1328,21 @@
                 return null;
             }
 
-
             return {
                 view: match.view,
+                route: match.route,
                 routeValues: ko.utils.extend(match.routeValues, kr.utils.parseQueryString(path))
             };
         }
 
         function handleError(name, errorTemplateID, reason, routeValues) {
-            var errorTemplate;            
+            var errorTemplate;
             var errorArgs = {
                 routeValues: routeValues,
                 context: this,
                 error: reason,
                 errorHandled: false
-           };
+            };
             var errorView = new kr.View({
                 name: name,
                 modelInstance: {
@@ -1313,7 +1354,7 @@
             });
 
             self.onLoadError.notifySubscribers(errorArgs);
-                        
+
             if (!errorArgs.errorHandled && errorTemplateID) {
                 errorTemplate = self.getTemplate(errorTemplateID, {
                     templateID: errorTemplateID
@@ -1344,9 +1385,13 @@
             var ctx = {
                 path: path,
                 // Cancel the navigation
-                isCancelled: false,                
+                isCancelled: false,
                 cancel: function () {
                     this.isCancelled = true;
+                    self.pathProvider.stop();
+                    self.pathProvider.revert(function () {
+                        self.pathProvider.start();
+                    });
                 },
                 // Persist the existing model when navigating to the new view
                 isPersistModelSet: false,
@@ -1359,20 +1404,13 @@
                 }
             };
 
-            var cancel = function () {
-                self.pathProvider.stop();
-                self.pathProvider.revert(function () {
-                    self.pathProvider.start();
-                });
-            };
-
             if (viewMatch == null) {
-                ctx.routeValues = null;                
+                ctx.routeValues = null;
             } else {
                 ctx.routeValues = viewMatch.routeValues;
                 ctx.view = viewMatch.view;
             }
-            
+
             if (viewMatch != null && viewMatch.view === currentView()) {
                 executeModelAction(viewMatch.view, options.updateMethodName, viewMatch.routeValues)['catch'](function (reason) {
                     handleError('Error', options.errorTemplateID, reason, ctx.routeValues);
@@ -1381,15 +1419,15 @@
                 // If the view is changing, we need to invoke unload on the existing model, 
                 executeModelUnload(currentView(), ctx);
 
-                // If the unload method cancelled the navigation then revert to the previous path
                 if (ctx.isCancelled) {
-                    cancel();
-                // else if the new path doesn't match any defined route or view, show an error
+                    // If the unload method cancelled the navigation then revert to the previous path
+                    return;
                 } else if (viewMatch == null) {
+                    // else if the new path doesn't match any defined route or view, show an error
                     handleError('NotFound', options.notFoundTemplateID, 'Path not found');
                     return;
-                // else set the new view as the current view
                 } else {
+                    // else set the new view as the current view
                     setCurrent(viewMatch.view, viewMatch.routeValues, ctx);
                 }
             }
@@ -1406,14 +1444,14 @@
             }
 
             self.pathProvider = newProvider;
-            
+
             pathChangedEvent = self.pathProvider.pathChanged.subscribe(onPathChanged);
 
             if (initialized) {
                 self.pathProvider.start();
             }
         }
-        
+
         function init() {
             if (initialized) {
                 return;
@@ -1433,7 +1471,7 @@
         function addView(view) {
             var v;
             var area;
-            
+
             //TODO: Is there really a use case for passing in a kr.View() vs. an anonymous obj?                    
             if (view instanceof kr.View) {
                 v = view;
@@ -1457,15 +1495,17 @@
         //#endregion
 
         //#region public properties
-        
+
         // Gets or sets the path provider
         self.pathProvider = null;
 
         setPathProvider(new kr.HashPathStringProvider());
-        
+
         self.templateProvider = new kr.DefaultTemplateProvider();
 
         self.modelFactory = new DefaultModelFactory();
+
+        self.scrollProvider = new WindowScrollProvider();
 
         self.bus = new kr.Bus();
 
@@ -1505,20 +1545,22 @@
             if (newAreas && newAreas.forEach) {
                 newAreas.forEach(function (area) {
                     areas.push(new kr.Area(area));
-                        
+
                     //TODO: area prop name here should be options.areaRouteKey
+
+                    //area: area.name
 
                     if (isArray(area.routes)) {
                         area.routes.forEach(function (route) {
                             areaRoutes.push({
-                                route: new kr.Route('{area=' + area.name + '}/' + route.route.routeTemplate),
-                                defaults: ko.utils.extend({ area: area.name }, route.defaults)
+                                route: new kr.Route('{area=' + area.name + '}/' + route.template),
+                                defaults: ko.utils.extend({}, route.defaults)
                             });
                         });
                     } else {
                         areaRoutes.push({
                             route: new kr.Route('{area=' + area.name + '}/' + routes[0].route.routeTemplate),
-                            defaults: ko.utils.extend({ area: area.name }, routes[0].defaults)
+                            defaults: ko.utils.extend({}, routes[0].defaults)
                         });
                     }
                 });
@@ -1573,7 +1615,7 @@
                 throw new TypeError('addedRoutes must be an array.');
             }
         };
-        
+
         // Gets an area by name.
         self.getArea = function (name) {
             /// <summary>Gets an area by name.</summary>
@@ -1634,7 +1676,7 @@
             }
 
             ko.utils.extend(options, newOptions);
-                                                
+
             if (isArray(newOptions.templates)) {
                 self.clearTemplates();
                 self.addTemplates(newOptions.templates);
@@ -1664,13 +1706,19 @@
             } else if (newOptions.templateProvider === 'ajax') {
                 self.templateProvider = new kr.AjaxTemplateProvider();
             }
-            
+
             // Support the popstate path provider, and fakes for testing mostly
             // (there's only so may ways you are going to persist the path)
             if (typeof newOptions.pathProvider === 'object') {
                 setPathProvider(newOptions.pathProvider);
             } else if (newOptions.pathProvider === 'history') {
                 setPathProvider(new kr.HistoryPathStringProvider(newOptions.basePath));
+            }
+
+            if (typeof newOptions.scrollProvider === 'object') {
+                self.scrollProvider = newOptions.scrollProvider;
+            } else if (newOptions.scrollProvider === 'window') {
+                self.scrollProvider = new kr.WindowScrollProvider();
             }
         };
 
@@ -1692,16 +1740,16 @@
             if (match == null) {
                 match = findFirstResolvingRoute(routeValues, currentPath, routes);
             }
-                        
+
             if (match == null) {
                 throw 'No matching route for given path';
             }
 
-            if (!ignoreCurrent) {
-                currentRouteValues = match.route.match(currentPath);
-                kr.utils.extend(currentRouteValues, kr.utils.parseQueryString(currentPath));
-                routeValues = kr.utils.extend(currentRouteValues, routeValues);
-            }
+            //if (!ignoreCurrent) {
+            //    currentRouteValues = match.route.match(currentPath) || {};
+            //    ko.utils.extend(currentRouteValues, kr.utils.parseQueryString(currentPath));
+            //    routeValues = ko.utils.extend(currentRouteValues, routeValues);
+            //}
 
             for (var key in routeValues) {
                 //TODO: if you don't want to apply optional defaults, 
@@ -1713,7 +1761,7 @@
                 }
             }
 
-            kr.utils.defaults(match.defaults, routeValues);
+            //kr.utils.defaults(match.defaults, routeValues);
 
             path += match.route.resolve(routeValues, currentPath);
 
