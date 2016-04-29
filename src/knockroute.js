@@ -834,10 +834,12 @@
                     template.setAttribute("data-loaded", "true");
                     response.success = true;
                     response.statusCode = ctx.status;
+					response.statusText = ctx.statusText;
                     resolve(response);
                 }).fail(function (ctx, status, statusText) {
                     response.success = false;
                     response.statusCode = ctx.status;
+					response.statusText = ctx.statusText;					
                     reject(response);
                 });
             } else {

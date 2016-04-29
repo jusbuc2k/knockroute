@@ -1,0 +1,20 @@
+{
+  "name": "knockroute",
+  "description": "Router & lazy template loader for Knockout",
+  "main": "dist/knockroute.js",
+  "authors": [
+    "Justin R. Buchanan"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/jusbuc2k/knockroute",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests",
+    "lib",
+    "examples",
+    "Scripts"
+  ]
+}

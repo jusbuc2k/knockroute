@@ -8,9 +8,7 @@ var gulp = require('gulp');
 var uglify = require('gulp-uglify');
 var concat = require('gulp-concat');
 var rename = require('gulp-rename');
-
 var header = require('gulp-header');
-
 
 var banner = ['/**',
   ' * <%= pkg.name %> - <%= pkg.description %>',
