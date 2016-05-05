@@ -10,7 +10,7 @@
 
     // Object that will be exported
     var kr = {
-        version: '0.9.11-alpha1'
+        version: '0.9.12-alpha1'
     };
 
     // Export everthing attached to kr into ko.route
