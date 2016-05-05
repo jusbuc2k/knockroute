@@ -10,7 +10,7 @@
 
     // Object that will be exported
     var kr = {
-        version: '0.9.9-alpha1'
+        version: '0.9.11-alpha1'
     };
 
     // Export everthing attached to kr into ko.route
@@ -1754,16 +1754,11 @@
             //}
 
             for (var key in routeValues) {
-                //TODO: if you don't want to apply optional defaults, 
-                // ignore them here by adding a getKey instead of hasKey and checking type
-                // then get rid of the kr.utils.defaults below
-                if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key)) {
+                if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key) && nvc[key] !== undefined) {
                     nvc[key] = routeValues[key];
                     hasQuery = true;
                 }
             }
-
-            //kr.utils.defaults(match.defaults, routeValues);
 
             path += match.route.resolve(routeValues, currentPath);
 
