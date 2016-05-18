@@ -10,7 +10,7 @@
 
     // Object that will be exported
     var kr = {
-        version: '0.9.12-alpha1'
+        version: '0.9.13-alpha1'
     };
 
     // Export everthing attached to kr into ko.route
@@ -442,10 +442,10 @@
     };
 
     // Resolves the given route values object to a string path
-    Route.prototype.resolve = function (routeValues, currentPath) {
+    Route.prototype.resolve = function (routeValues, currentPath, defaultValues) {
         /// <param name="routeValues" type="Object"/>
-        /// <param name="defaultValues" type="Object" optional="true"/>
         /// <param name="currentPath" type="String" optional="true"/>
+        /// <param name="defaultValues" type="Object" optional="true">An optional set of routeValues to apply to fill in missing path segments after the first one defined in routeValues.</param>
         var pathParts = [];
 
         var currentPathSegements;
@@ -497,6 +497,8 @@
                         } else {
                             return null;
                         }
+                    } else if (typeof defaultValues === 'object' && defaultValues.hasOwnProperty(routePart.name)) {
+                        pathParts.push(defaultValues[routePart.name]);
                     } else if (routePart.optional) {
 
                     } else {
@@ -591,10 +593,12 @@
         };
 
         // Starts monitoring changes to the path persistence medium
-        self.start = function () {
+        self.start = function (notify) {
             // subscribe to the hashchange event if useRouteValues
             kr.utils.attachEvent(window, 'hashchange', hashChanged);
-            hashChanged();
+            if (notify !== false) {
+                hashChanged();
+            }
         };
 
         // Stops monitoring changes to the path
@@ -608,7 +612,7 @@
             //TODO: Should this just to window.history.back()? Pros/cons if so?
             self.setPath(lastPath);
             if (typeof callback === 'function') {
-                window.setTimeout(callback, 20);
+                window.setTimeout(callback, 1);
             }
         };
 
@@ -651,10 +655,12 @@
         };
 
         // Starts monitoring changes to the path persistence medium
-        self.start = function () {
+        self.start = function (notify) {
             // subscribe to the hashchange event if useRouteValues
             kr.utils.attachEvent(window, 'popstate', handlePopState);
-            handlePopState();
+            if (notify !== false) {
+                handlePopState();
+            }
         };
 
         // Stops monitoring changes to the path
@@ -664,9 +670,11 @@
         };
 
         // Sets the path value to the previous value.
-        self.revert = function (callback) {
+        self.revert = function (callback) {			
             self.setPath(lastPath);
-            window.setTimeout(callback, 20);
+            if (typeof callback === 'function') {
+                window.setTimeout(callback, 1);
+            }
         };
 
         function extractBase(path) {
@@ -1013,7 +1021,6 @@
     function ViewRouter(options) {
         /// <summary>Used to dynamically bind view models to views based on changes in the browser URL.</summary>
         /// <param name="options" type="Object">A set of options.</param>
-
         /// <field name='view' type='kr.View'>Gets the current view.</field>
         /// <field name='pathProvider'>Gets or sets the path provider, which is responsible for watching, getting, and setting the current path portion of the URL.</field>
         /// <field name='templateProvider'>Gets or sets the template provider, which is responsible for loading and unloading templates.</field>
@@ -1069,6 +1076,31 @@
 
         // Gets or sets the current view
         var currentView = ko.observable(defaultView);
+
+        function createNavigationContext(path){
+            return {
+                path: path,
+                // Cancel the navigation
+                isCancelled: false,
+                cancel: function () {
+                    this.isCancelled = true;
+                    self.pathProvider.stop();
+                    self.pathProvider.revert(function () {
+                        // start watching for path changes, but don't notify
+                        self.pathProvider.start(false);
+                    });
+                },
+                // Persist the existing model when navigating to the new view
+                isPersistModelSet: false,
+                persistModel: function () {
+                    this.isPersistModelSet = true;
+                },
+                isPreventDisposeSet: false,
+                preventDispose: function () {
+                    this.isPreventDisposeSet = true;
+                }
+            };
+        }
 
         function executeModelAction(view, actionName, routeValues) {
             var p;
@@ -1172,6 +1204,23 @@
 
             if (aborter) {
                 aborter.abort('abort');
+            }
+
+            if (view === oldView) {
+                executeModelAction(view, options.updateMethodName, routeValues)['catch'](function (reason) {
+                    handleError('Error', options.errorTemplateID, reason, routeValues);
+                });
+                
+                // Skip everything else in this method because the view didn't change
+                return;
+            } else {
+                // If the view is changing, we need to invoke unload on the existing model, which is required to be syncronus
+                executeModelUnload(oldView, navigationContext);
+
+                // The unload operation was cancelled.
+                if (navigationContext.isCancelled) {
+                    return;
+                }
             }
 
             aborter = kr.utils.abortable(function () {
@@ -1307,7 +1356,8 @@
 
                     return {
                         route: route,
-                        defaults: defaults
+                        defaults: defaults,
+                        path: tmp
                     };
                 }
             }
@@ -1384,27 +1434,7 @@
             /// <param name="path" type="String"></param>
             var viewMatch = getMatchingViewAndRouteValues(path);
 
-            var ctx = {
-                path: path,
-                // Cancel the navigation
-                isCancelled: false,
-                cancel: function () {
-                    this.isCancelled = true;
-                    self.pathProvider.stop();
-                    self.pathProvider.revert(function () {
-                        self.pathProvider.start();
-                    });
-                },
-                // Persist the existing model when navigating to the new view
-                isPersistModelSet: false,
-                persistModel: function () {
-                    this.isPersistModelSet = true;
-                },
-                isPreventDisposeSet: false,
-                preventDispose: function () {
-                    this.isPreventDisposeSet = true;
-                }
-            };
+            var ctx = createNavigationContext(path);
 
             if (viewMatch == null) {
                 ctx.routeValues = null;
@@ -1413,25 +1443,12 @@
                 ctx.view = viewMatch.view;
             }
 
-            if (viewMatch != null && viewMatch.view === currentView()) {
-                executeModelAction(viewMatch.view, options.updateMethodName, viewMatch.routeValues)['catch'](function (reason) {
-                    handleError('Error', options.errorTemplateID, reason, ctx.routeValues);
-                });
+            if (viewMatch == null) {
+            // else if the new path doesn't match any defined route or view, show an error
+                handleError('NotFound', options.notFoundTemplateID, 'Path not found');
+                return;
             } else {
-                // If the view is changing, we need to invoke unload on the existing model, 
-                executeModelUnload(currentView(), ctx);
-
-                if (ctx.isCancelled) {
-                    // If the unload method cancelled the navigation then revert to the previous path
-                    return;
-                } else if (viewMatch == null) {
-                    // else if the new path doesn't match any defined route or view, show an error
-                    handleError('NotFound', options.notFoundTemplateID, 'Path not found');
-                    return;
-                } else {
-                    // else set the new view as the current view
-                    setCurrent(viewMatch.view, viewMatch.routeValues, ctx);
-                }
+                setCurrent(viewMatch.view, viewMatch.routeValues, ctx);
             }
         }
 
@@ -1496,7 +1513,7 @@
 
         //#endregion
 
-        //#region public properties
+        //#region Public properties
 
         // Gets or sets the path provider
         self.pathProvider = null;
@@ -1513,7 +1530,7 @@
 
         //#endregion
 
-        //#region Public Methods.
+        //#region Public Methods
 
         // Clears all existing templates.
         self.clearTemplates = function () {
@@ -1747,11 +1764,18 @@
                 throw 'No matching route for given path';
             }
 
+            //This should be handled already by the current path crap?
             //if (!ignoreCurrent) {
+            //    //TODO: This should only apply current path values from left to right, until it reaches the first
+            //    // element that is defined in routeValues
             //    currentRouteValues = match.route.match(currentPath) || {};
             //    ko.utils.extend(currentRouteValues, kr.utils.parseQueryString(currentPath));
             //    routeValues = ko.utils.extend(currentRouteValues, routeValues);
             //}
+
+            //kr.utils.defaults(match.defaults, routeValues);
+
+            path += match.route.resolve(routeValues, currentPath, match.defaults);
 
             for (var key in routeValues) {
                 if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key) && nvc[key] !== undefined) {
@@ -1759,8 +1783,6 @@
                     hasQuery = true;
                 }
             }
-
-            path += match.route.resolve(routeValues, currentPath);
 
             if (hasQuery) {
                 path += (queryMarker + kr.utils.serializeQueryString(nvc));
@@ -1794,6 +1816,36 @@
                 //needed in onPathChanged
                 throw 'No matching route or path exists.';
             }
+        };
+
+        self.setView = function (view, routeValues, path) {
+            /// <summary>Sets the current view. Optionally also sets the routeValues passed to the model, and the current path.</summary>
+            /// <param name="view" type="Object">A view instance or view object</param>
+            /// <param name="routeValues" type="Object" optional="true">A collection of route values.</param>
+            /// <param name="path" type="String" optional="true">If specified, the current path will updated with the path provider, but will not trigger a path changed event.</param>
+            var navContext;
+
+            if (!(view instanceof kr.View)) {
+                view = new kr.View(view);
+            }
+
+            if (view == currentView()) {
+                return;
+            }
+
+            routeValues = routeValues || {};
+
+            if (typeof path === 'string') {
+                this.pathProvider.stop();
+                this.pathProvider.setPath(path);
+                this.pathProvider.start(false);
+            } else {
+                path = this.pathProvider.getPath();
+            }
+            
+            navContext = createNavigationContext(path);
+
+            setCurrent(view, routeValues, navContext)
         };
 
         // Sets the active templateID on the current view. This is the same as calling view().activeTemplateID(...)
