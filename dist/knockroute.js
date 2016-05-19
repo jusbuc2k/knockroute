@@ -1,5 +1,6 @@
 /**
  * knockroute - Router & lazy template loader for Knockout
+ * Copyright 2016 Justin R. Buchanan 
  * @version v0.9.13-alpha1
  * @link https://github.com/jusbuc2k/knockroute
  * @license MIT
@@ -15,8 +16,7 @@
     //#endregion
 
     // Object that will be exported
-    var kr = {
-        version: '0.9.13-alpha1'
+    var kr = {        
     };
 
     // Export everthing attached to kr into ko.route
@@ -564,9 +564,13 @@
     //#region Default Providers
 
     // A path provider that persists the path value to the hash (#) portion of the URL.
-    function HashPathStringProvider() {
+    function HashPathStringProvider(options) {
         var self = this;
-        var lastPath = '';
+        var history = [];
+
+        options = kr.utils.defaults({
+            maxHistoryEntries: 100
+        }, options || {});
 
         // Fires whenever the path value changes
         self.pathChanged = new ko.subscribable();
@@ -613,19 +617,47 @@
             kr.utils.detachEvent(window, 'hashchange', hashChanged);
         };
 
-        // Sets the path value to the previous value.
-        self.revert = function (callback) {
-            //TODO: Should this just to window.history.back()? Pros/cons if so?
-            self.setPath(lastPath);
-            if (typeof callback === 'function') {
-                window.setTimeout(callback, 1);
+        // Gets the previous path in the path history, if any history records exist.
+        self.peekBack = function () {
+            if (history.length >= 2) {
+                return history[history.length - 2];
+            } else {
+                return undefined;
             }
+        };
+
+        // Sets the current path to the previous path in the history, if one exists, and triggers a change event.
+        self.back = function (callback) {
+            if (history.length > 1) {
+                // pop the current path off first
+                history.pop();
+                self.setPath(history.pop());
+                
+                if (typeof callback === 'function') {
+                    window.setTimeout(callback, 1);
+                }
+
+                return true;
+            }
+
+            return false;
         };
 
         function hashChanged() {
             var path = self.getPath();
+
+            if (typeof path === 'string') {
+                addHistory(path);
+            }
+
             self.pathChanged.notifySubscribers(path);
-            lastPath = path;
+        }
+
+        function addHistory(path) {
+            if (history.length >= options.maxHistoryEntries) {
+                history.splice(0, 1 + (options.maxHistoryEntries-history.length));
+            }
+            history.push(path);
         }
     }
 
@@ -633,10 +665,11 @@
 
     function HistoryPathStringProvider(options) {
         var self = this;
-        var lastPath = '';
+        var history = [];
 
         var defaultOptions = {
-            basePath: '^'
+            basePath: '^',
+            maxHistoryEntries: 100
         };
 
         options = kr.utils.defaults(defaultOptions, options || {});
@@ -676,11 +709,19 @@
         };
 
         // Sets the path value to the previous value.
-        self.revert = function (callback) {			
-            self.setPath(lastPath);
-            if (typeof callback === 'function') {
-                window.setTimeout(callback, 1);
+        self.back = function (callback) {
+            if (history.length >= 2) {
+                history.pop();
+                self.setPath(history.pop());
+
+                if (typeof callback === 'function') {
+                    window.setTimeout(callback, 1);
+                }
+
+                return true;
             }
+            
+            return false;
         };
 
         function extractBase(path) {
@@ -705,8 +746,19 @@
 
         function handlePopState() {
             var path = self.getPath();
+
+            if (typeof path === 'string') {
+                addHistory(path);
+            }
+
             self.pathChanged.notifySubscribers(path);
-            lastPath = path;
+        }
+
+        function addHistory(path) {
+            if (history.length >= options.maxHistoryEntries) {
+                history.splice(0, 1 + (options.maxHistoryEntries - history.length));
+            }
+            history.push(path);
         }
     }
 
@@ -1089,10 +1141,13 @@
                 // Cancel the navigation
                 isCancelled: false,
                 cancel: function () {
+                    if (this.isCancelled) {
+                        return;
+                    }
                     this.isCancelled = true;
                     self.pathProvider.stop();
-                    self.pathProvider.revert(function () {
-                        // start watching for path changes, but don't notify
+                    self.pathProvider.back(function () {
+                        // start watching for path changes again, but don't notify
                         self.pathProvider.start(false);
                     });
                 },
@@ -1795,7 +1850,7 @@
             }
 
             return this.pathProvider.decorate(path);
-        }
+        };
 
         self.navigate = function (routeValues, ignoreCurrent) {
             /// <signature>
@@ -1821,6 +1876,18 @@
                 //TODO: Handle this along with the virtual-404 type stuff
                 //needed in onPathChanged
                 throw 'No matching route or path exists.';
+            }
+        };
+
+        self.navigateBack = function () {
+            /// <summary>Navigates to the previous path in the path provider's history, if the provider supports history tracking.</summary>
+            /// <returns>A promise, which resolves when the navigation is complete</returns>
+            if (typeof self.pathProvider.back === 'function') {
+                return new Promise(function (accept, reject) {
+                    self.pathProvider.back(accept);
+                });
+            } else {
+                return new Promise.resolve(null);
             }
         };
 

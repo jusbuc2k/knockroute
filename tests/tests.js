@@ -445,30 +445,35 @@ QUnit.asyncTest('TestHashPathStringProvider', function (assert) {
                 assert.strictEqual(psp.getPath(), '/foo/bar');
                 QUnit.start();
             });
-        }, 20);
-    }, 20);   
+        }, 1);
+    }, 1);   
 });
 
 QUnit.asyncTest('TestHashPathStringProviderEvents', function (assert) {
     var psp = new ko.route.HashPathStringProvider();
-    expect(2);
+    expect(5);
 
     window.location.hash = '#';
     psp.start();
-
-    var evt = psp.pathChanged.subscribe(function (path) {
-        assert.strictEqual(path, 'foobar');
-        psp.stop();
-        evt.dispose();
-        psp.revert();
-
+    window.location.hash = '#/foo-a';
+    window.setTimeout(function () {
+        window.location.hash = '#/foo-b';
         window.setTimeout(function () {
-            assert.ok(window.location.hash === '#' || window.location.hash === '');
-            QUnit.start();
-        },20);
-    });
-
-    window.location.hash = '#foobar';
+            window.location.hash = '#/foo-c';
+            window.setTimeout(function () {
+                assert.strictEqual(psp.getPath(), '/foo-c');
+                assert.strictEqual(psp.back(), true);
+                window.setTimeout(function () {
+                    assert.strictEqual(psp.getPath(), '/foo-b');
+                    assert.strictEqual(psp.back(), true);
+                    window.setTimeout(function () {
+                        assert.strictEqual(psp.getPath(), '/foo-a');
+                        QUnit.start();
+                    }, 1);
+                }, 1);
+            }, 1);
+        }, 1);
+    },1); 
 });
 
 QUnit.asyncTest('TestHistoryPathStringProvider', function (assert) {
@@ -574,7 +579,7 @@ function FakePathProvider() {
     self.stop = function () {
     };
 
-    self.revert = function (callback) {
+    self.back = function (callback) {
         self.setPath(lastPath);
         callback();
     };
@@ -1795,3 +1800,37 @@ QUnit.asyncTest('TestSetView', function (assert) {
     router.setView(router.getView('view1'));
 
 });
+
+QUnit.asyncTest('TestNavigateBackWithHashProvider', function (assert) {
+    var router = new ko.route.ViewRouter({
+        views: [
+            { name: 'home', model: TestModel, templateID: 'template1', templateSrc: 'template.html' },
+            { name: 'view1', model: TestModel, templateID: 'template2', templateSrc: 'template.html' }
+        ],
+        pathProvider: new ko.route.HashPathStringProvider(),
+        scrollProvider: new FakeScrollProvider(),
+        templateProvider: new FakeTemplateProvider({
+            templateContainer: $('#qunit-fixture')[0],
+            createTemplates: true
+        })
+    });
+
+    expect(3);
+
+    router.init();
+    
+    window.setTimeout(function () {
+        assert.strictEqual(router.view().name, 'home');
+        router.navigate('view1');
+        window.setTimeout(function () {
+            assert.strictEqual(router.view().name, 'view1');
+            window.setTimeout(function () {
+                router.navigateBack().then(function () {
+                    assert.strictEqual(router.view().name, 'home');
+                    QUnit.start();
+                });
+            }, 1);
+        }, 1);
+    }, 1);
+});
+
