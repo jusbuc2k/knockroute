@@ -1,7 +1,7 @@
 /**
  * knockroute - Router & lazy template loader for Knockout
  * Copyright 2016 Justin R. Buchanan 
- * @version v0.9.13-alpha1
+ * @version v0.9.14-alpha1
  * @link https://github.com/jusbuc2k/knockroute
  * @license MIT
  */
@@ -1965,7 +1965,7 @@ if (!Array.prototype.map) {
             path += match.route.resolve(routeValues, currentPath, match.defaults);
 
             for (var key in routeValues) {
-                if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key) && nvc[key] !== undefined) {
+                if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key) && nvc[key] === undefined) {
                     nvc[key] = routeValues[key];
                     hasQuery = true;
                 }

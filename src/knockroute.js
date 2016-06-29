@@ -1832,7 +1832,7 @@
             path += match.route.resolve(routeValues, currentPath, match.defaults);
 
             for (var key in routeValues) {
-                if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key) && nvc[key] !== undefined) {
+                if (routeValues.hasOwnProperty(key) && !match.route.hasKey(key) && nvc[key] === undefined) {
                     nvc[key] = routeValues[key];
                     hasQuery = true;
                 }
