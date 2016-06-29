@@ -688,7 +688,7 @@ QUnit.asyncTest('TestInitialize', function(assert) {
 });
 
 QUnit.test('TestResolve', function (assert) {
-    expect(5);
+    expect(7);
 
     $('#qunit-fixture').append("<script type='text/html' id='template1'>FooBar</script>");
 
@@ -719,6 +719,9 @@ QUnit.test('TestResolve', function (assert) {
     router.init();
     assert.strictEqual(router.resolve({ view: 'foo', action: 'bar' }), 'foo/bar');
     assert.strictEqual(router.resolve({ view: 'foo', action: 'bar', foo: 123 }), 'foo/bar?foo=123', "unmapped params should be on querystring");
+    router.pathProvider.setPath('foo/bar?foo=123');
+    assert.strictEqual(router.resolve({ view: 'foo', action: 'bar', foo: 456 }), 'foo/bar?foo=456');
+    assert.strictEqual(router.resolve({ foo: 789 }), 'foo/bar?foo=789');
 
     router.pathProvider.setPath('bean/default');
     assert.strictEqual(router.resolve({ view: 'foo', action: 'bar' }), 'bean/foo/bar');

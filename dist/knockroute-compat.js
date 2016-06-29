@@ -1,7 +1,7 @@
 /**
  * knockroute - Router & lazy template loader for Knockout
  * Copyright 2016 Justin R. Buchanan 
- * @version v0.9.14-alpha1
+ * @version v0.9.15-alpha1
  * @link https://github.com/jusbuc2k/knockroute
  * @license MIT
  */
@@ -586,11 +586,17 @@ if (!Array.prototype.map) {
         var routePart;
         var encodeBefore = Number.MAX_VALUE;
         var ignoreCurrentPath = false;
+        var queryIndex = -1;
 
         if (typeof currentPath === 'string' && currentPath.length > 0) {
             if (currentPath[0] === this.options.pathSeperator) {
                 currentPath = currentPath.slice(1);
             }
+           
+            if ((queryIndex = currentPath.indexOf('?')) >= 0) {
+                currentPath = currentPath.slice(0, queryIndex);
+            }
+
             currentPathSegements = currentPath.split(this.options.pathSeperator);
         }
 
