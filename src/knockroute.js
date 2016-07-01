@@ -831,11 +831,15 @@
 
         var defaultOptions = {
             createTemplates: true,
+            useTags: true,
+            tagName: "script",
             templateContainer: null,
-            cache: true
+            cache: true,
+            cacheNodes: true
         };
 
         this.options = kr.utils.defaults(defaultOptions, options || {});
+        this.templateCache = {};
 
         //TODO: support a default base path for templates.
         // where do we put that? a property of this object, or a param to the load and getOrCreate method, or
@@ -846,16 +850,13 @@
         }
     }
 
-    AjaxTemplateProvider.prototype.loadTemplate = function (view) {
-        ///<summary>Using jQuery AJAX, loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source; returns a promise that resolves when the template is loaded.</summary>
-        ///<param name="view" type="kr.View">The view or template object with the necessary properties to load the template.</param>
-        ///<remarks>Uses the jQuery $.ajax function.</remarks>
+    AjaxTemplateProvider.prototype.loadTemplateTag = function (view) {
         var template = window.document.getElementById(view.templateID);
         var templateContainer = this.options.templateContainer || window.document.body;
         var self = this;
 
         if (this.options.createTemplates && !template && view.templateSrc) {
-            template = window.document.createElement("script");
+            template = window.document.createElement(this.options.tagName);
             template.type = "text/html";
             template.id = view.templateID;
             if (!this.options.cache) {
@@ -871,8 +872,8 @@
             throw "There is no template defined with id '" + view.templateID + "'";
         }
 
-        if (template.tagName.toLowerCase() !== 'script') {
-            throw 'The element with id ' + view.templateID + ' must be a <script> tag in order to use it as a template.';
+        if (template.tagName.toLowerCase() !== this.options.tagName) {
+            throw 'The element with id ' + view.templateID + ' must be a <' + this.options.tagName + '> tag in order to use it as a template.';
         }
 
         var contentSrc = view.templateSrc || template.getAttribute("data-src");
@@ -899,12 +900,12 @@
                     template.setAttribute("data-loaded", "true");
                     response.success = true;
                     response.statusCode = ctx.status;
-					response.statusText = ctx.statusText;
+                    response.statusText = ctx.statusText;
                     resolve(response);
                 }).fail(function (ctx, status, statusText) {
                     response.success = false;
                     response.statusCode = ctx.status;
-					response.statusText = ctx.statusText;					
+                    response.statusText = ctx.statusText;
                     reject(response);
                 });
             } else {
@@ -913,6 +914,94 @@
                 resolve(response);
             }
         });
+    };
+
+    AjaxTemplateProvider.prototype.loadTemplateNodes = function (view) {
+        var scope = this;
+        var response = {
+            success: false,
+            statusCode: 0
+        };
+
+        if (view.templateID == null) {
+            throw new Error("The templateID must be provided for the given view.");
+        }
+
+        return new Promise(function (resolve, reject) {
+            var cache = scope.templateCache[view.templateID];
+            var contentSrc;
+            var templateElement;
+
+            if (cache) {
+                response.templateNodes = cache.nodes;
+                response.success = true;
+                response.statusCode = 203;
+                resolve(response);
+            } else if (templateElement = window.document.getElementById(view.templateID)) {
+                // The template was inlined into the document body
+                response.templateNodes = ko.utils.parseHtmlFragment(templateElement.text);
+                response.success = true;
+                response.statusCode = 203;
+                resolve(response);
+            } else {
+                if (view.templateSrc == null) {
+                    throw new Error("The templateSrc must be provided for the given view.");
+                }
+
+                contentSrc = view.templateSrc;
+                if (!scope.options.cache) {
+                    contentSrc += '?v=' + new Date().getTime().toString();
+                }
+
+                jQuery.get(contentSrc).done(function (content, status, ctx) {
+                    var $content = $(content);
+
+                    if ($content.prop("tagName") === "TEMPLATE") {                                                
+                        if ($content[0].content) {
+                            // browser supports <template>
+                            response.templateNodes = $content[0].content.childNodes;
+                        } else {
+                            // fallback on string parsing the template again to remove the parent <template> tag
+                            response.templateNodes = ko.utils.parseHtmlFragment($content.html());
+                        }
+                    } else if ($content.prop("tagName") === "SCRIPT") {
+                        response.templateNodes = ko.utils.parseHtmlFragment($content[0].text);
+                    } else {
+                        // We aren't using a template tag, so just use the raw content nodes
+                        response.templateNodes = $content.toArray();
+                    }
+
+                    if (scope.options.cacheNodes && view.templatePersist) {
+                        scope.templateCache[view.templateID] = {
+                            persist: view.templatePersist,
+                            nodes: response.templateNodes
+                        };
+                    }
+
+                    response.success = true;
+                    response.statusCode = ctx.status;
+                    response.statusText = ctx.statusText;
+                    resolve(response);
+                }).fail(function (ctx, status, statusText) {
+                    response.success = false;
+                    response.statusCode = ctx.status;
+                    response.statusText = ctx.statusText;
+                    reject(response);
+                });
+            }
+        });
+    };
+
+    AjaxTemplateProvider.prototype.loadTemplate = function (view) {
+        ///<summary>Using jQuery AJAX, loads the contents of an HTML template defined as a &lt;script&gt; block from a remote source; returns a promise that resolves when the template is loaded.</summary>
+        ///<param name="view" type="kr.View">The view or template object with the necessary properties to load the template.</param>
+        ///<remarks>Uses the jQuery $.ajax function.</remarks>
+
+        if (this.options.useTags) {
+            return this.loadTemplateTag(view);
+        } else {
+            return this.loadTemplateNodes(view);
+        }
     };
 
     AjaxTemplateProvider.prototype.unloadTemplate = function (template) {
@@ -925,22 +1014,25 @@
         /// <param name="template" type="HTMLScriptElement">A string.</param>       
         /// </signature>
 
-        if (typeof template === 'string') {
-            template = window.document.getElementById(template);
-        }
+        if (this.options.useTags) {
 
-        if (!(template instanceof HTMLScriptElement)) {
-            throw 'The \'template\' parameter must be an element ID or an HTMLScriptElement';
-        }
+            if (typeof template === 'string') {
+                template = window.document.getElementById(template);
+            }
 
-        // if the template is marked as persistent (data-persist), don't actually unload it.
-        // or if the template does not have a source attribute (it's a static template)
-        if (isTrue(template, 'data-persist') || template.getAttribute('data-src') == null) {
-            return;
-        }
+            if (!(template instanceof HTMLScriptElement)) {
+                throw 'The \'template\' parameter must be an element ID or an HTMLScriptElement';
+            }
 
-        template.setAttribute("data-loaded", "false");
-        template.text = '';
+            // if the template is marked as persistent (data-persist), don't actually unload it.
+            // or if the template does not have a source attribute (it's a static template)
+            if (isTrue(template, 'data-persist') || template.getAttribute('data-src') == null) {
+                return;
+            }
+
+            template.setAttribute("data-loaded", "false");
+            template.text = '';
+        }
     };
 
     if (typeof jQuery !== 'undefined') {
@@ -1106,6 +1198,7 @@
             scrollProvider: 'window',
             defaultContent: 'Loading...', // Content to display before init
             defaultTemplateID: '',
+            defaultTemplateNodes: null,
             errorTemplateID: '',
             notFoundTemplateID: '',
             viewResolver: defaultViewResolver
@@ -1126,6 +1219,7 @@
         defaultView = new kr.View({
             name: null,
             templateID: options.defaultTemplateID,
+            templateNodes: options.defaultTemplateNodes,
             content: options.defaultContent
         });
 
@@ -1167,10 +1261,11 @@
             var newTemplateID = view.templateID;
             var newTemplate;
             var canSetTemplate = true;
+            var templateLoad;
 
             var actionContext = {
                 cancel: function () {
-
+                    throw new Error("Cancel Not Implemented");
                 },
                 setTemplate: function (templateID) {
                     if (canSetTemplate) {
@@ -1192,19 +1287,15 @@
             // a promise or a value.
             canSetTemplate = false;
 
-            newTemplate = self.getTemplate(newTemplateID, view);
+            if (newTemplateID !== view.templateID || actionName === options.loadMethodName) {
+                newTemplate = self.getTemplate(newTemplateID, view);
 
-            //if (newTemplate == null && newTemplateID === view.templateID) {
-            //    newTemplate = view;
-            //} else if (newTemplate == null) {
-            //    return Promise.reject('The template with id ' + newTemplateID + ' does not exist');
-            //}
+                templateLoad = loadTemplate(newTemplate);
 
-            return Promise.all([p,
-                self.templateProvider.loadTemplate(newTemplate).then(function (response) {
-                    view.activeTemplateID(newTemplateID);
-                })
-            ]);
+                return Promise.all([p, templateLoad]);
+            } else {
+                return p;
+            }
         }
 
         function executeModelUnload(view, navigationContext) {
@@ -1333,7 +1424,11 @@
 
                 // unload the old template if it is not the same as the new one
                 if (oldView.activeTemplateID() && oldView.activeTemplateID() !== view.templateID) {
-                    self.templateProvider.unloadTemplate(oldView.activeTemplateID());
+                    if (typeof oldView.disposeTemplate === 'function') {
+                        oldView.disposeTemplate();
+                    } else {
+                        self.templateProvider.unloadTemplate(oldView.activeTemplateID());
+                    }
                 }
 
                 waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function () {
@@ -1358,14 +1453,25 @@
 
         function loadTemplate(templateOrView) {
             var tmpl;
+            var newTemplateID;
 
             if (typeof templateOrView === 'string') {
                 tmpl = self.getTemplate(templateOrView);
+                newTemplateID = templateOrView;
             } else {
                 tmpl = templateOrView;
+                newTemplateID = templateOrView.templateID;
             }
 
-            return self.templateProvider.loadTemplate(tmpl);
+            return self.templateProvider.loadTemplate(tmpl).then(function (response) {
+                if (response.templateNodes) {
+                    templateOrView.templateNodes = response.templateNodes;
+                }
+
+                if (ko.isWriteableObservable(templateOrView.activeTemplateID)) {
+                    templateOrView.activeTemplateID(newTemplateID);
+                }
+            });
         }
 
         function findFirstMatchingRoute(path, routes) {
@@ -2010,11 +2116,17 @@
                 }
 
                 tmpl = {
-                    data: updatedView.modelInstance,
-                    name: ko.unwrap(updatedView.activeTemplateID) || updatedView.templateID
+                    data: updatedView.modelInstance                    
                 };
 
-                if (tmpl.data && tmpl.name) {
+                if (updatedView.templateNodes) {
+                    tmpl.nodes = updatedView.templateNodes;
+                } else {
+                    tmpl.name = ko.unwrap(updatedView.activeTemplateID) || updatedView.templateID;
+                }
+
+                if (tmpl.data && (tmpl.name || tmpl.nodes)) {
+                    ko.bindingHandlers.template.init(element, bindingValue);
                     ko.bindingHandlers.template.update(element, bindingValue, allBindings, viewModel, bindingContext);
                 } else {
                     throw 'Failed to load view';

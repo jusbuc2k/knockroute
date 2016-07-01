@@ -547,6 +547,43 @@ QUnit.asyncTest('TestAjaxTemplateProvider', function (assert) {
     });        
 });
 
+QUnit.asyncTest('TestAjaxTemplateProviderNodes', function (assert) {
+    expect(11);
+
+    var provider = new ko.route.AjaxTemplateProvider({
+        useTags: false
+    });
+
+    var tests = [];
+
+    assert.throws(function () {
+        provider.loadTemplate({ templateID: 'test' })
+    }, 'templateSrc is required');
+
+    assert.throws(function () {
+        provider.loadTemplate({ templateSrc: 'test' })
+    }, 'templateID is required');
+
+    tests.push(provider.loadTemplate({ templateID: 'test', templateSrc: 'template.html' }).then(function (result) {
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.statusCode, 200);
+        assert.ok(result.templateNodes && result.templateNodes.length > 0);
+        assert.ok(provider.templateCache["test"] == null);
+    }));
+
+    tests.push(provider.loadTemplate({ templateID: 'test2', templateSrc: 'template.html', templatePersist: true }).then(function (result) {
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.statusCode, 200);
+        assert.ok(result.templateNodes && result.templateNodes.length > 0);
+        assert.ok(provider.templateCache["test2"].persist == true);
+        assert.ok(provider.templateCache["test2"].nodes == result.templateNodes);
+    }));
+
+    $.when.apply($, tests).then(function () {
+        QUnit.start();
+    });
+});
+
 QUnit.module('Router');
 
 //#region Fakes
