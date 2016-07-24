@@ -1,10 +1,18 @@
-﻿
-; (function (global, ko) {
+﻿(function(factory) {
+    // Support AMD or global
+    if (typeof define === 'function' && define['amd']) {
+        // [1] AMD anonymous module
+        define(['exports', 'require', 'knockout'], factory);
+    } else {
+        // [2] No module loader (plain <script> tag) - put directly in global namespace
+        factory(null, null, window['ko']);
+    }
+}(function (exports, require, ko) {
     "use strict";
 
     //#region Dependencies
 
-    var Promise = global.Promise || global.ES6Promise.Promise;
+    var Promise = window.Promise || window.ES6Promise.Promise;
 
     //#endregion
 
@@ -2148,4 +2156,4 @@
 
     extendKo();
 
-})(window, ko);
+})(ko));
