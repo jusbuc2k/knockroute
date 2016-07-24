@@ -135,12 +135,12 @@ if (!Array.prototype.map) {
     // Support AMD or global
     if (typeof define === 'function' && define['amd']) {
         // [1] AMD anonymous module
-        define(['exports', 'require', 'knockout'], factory);
+        define(['exports', 'require', 'knockout', 'jquery'], factory);
     } else {
         // [2] No module loader (plain <script> tag) - put directly in global namespace
-        factory(null, null, window['ko']);
+        factory(null, null, window['ko'], window['jQuery']);
     }
-}(function (exports, require, ko) {
+}(function (exports, require, ko, jQuery) {
     "use strict";
 
     //#region Dependencies
@@ -150,13 +150,15 @@ if (!Array.prototype.map) {
     //#endregion
 
     // Object that will be exported
-    var kr = {        
+    var kr = exports || {
     };
 
     // Export everthing attached to kr into ko.route
     function extendKo() {
-        ko.route = kr;
         ko.bindingHandlers['routeTemplate'] = routerBinding;
+        if (kr !== exports){
+            ko.route = kr;
+        }   
     }
 
     //#region Constants
@@ -2289,4 +2291,4 @@ if (!Array.prototype.map) {
 
     extendKo();
 
-})(ko));
+}));
