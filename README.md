@@ -20,7 +20,17 @@ First, you need a working understanding of [Knockout](http://knockoutjs.com/), o
 
 ### Installation and Basic Use
 
-Add a script reference to knockroute.js, then use the routeTemplate binding.
+#### NPM
+
+    npm install knockroute
+
+#### bower
+
+    bower install knockroute
+
+#### Usage in Browser
+
+Add a script reference to knockroute.js, then use the routeTemplate binding. Alternatively, you can use an AMD module loader to load the script, in which case knockroute does *not* attach itself to the ko object.
 
 ```html
 
