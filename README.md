@@ -14,7 +14,6 @@ Simple view model and template router for Knockout.
  - ASP.NET inspired route template syntax
 - Area support for grouping views into functional areas (e.g. /person/list/, /person/view/, /widget/list/, etc.)
 
-
 ## Getting Started
 
 First, you need a working understanding of [Knockout](http://knockoutjs.com/), observables, bindings, etc.

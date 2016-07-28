@@ -1,16 +1,21 @@
 {
-  "version": "0.9.17-alpha1",
+  "version": "1.0.0",
   "name": "knockroute",
   "license": "MIT",
   "author": "Justin R. Buchanan",
   "description": "Router & lazy template loader for Knockout",
   "homepage": "https://github.com/jusbuc2k/knockroute",
-  "private": true,
+  "private": false,
+  "main": "dist/knockroute.js",
+  "repository": { 
+      "type" : "git",
+      "url" : "https://github.com/jusbuc2k/knockroute.git"
+  }, 
   "devDependencies": {
     "gulp": "^3.8.10",
     "gulp-uglify": "^1.4.1",
     "gulp-concat": "^2.6.0",
-    "gulp-header": "1.7.1",
+    "gulp-header": "^1.7.1",
     "gulp-rename": "^1.2.2"
   }
 }

@@ -1,7 +1,7 @@
 /**
  * knockroute - Router & lazy template loader for Knockout
  * Copyright 2016 Justin R. Buchanan 
- * @version v0.9.16-alpha1
+ * @version v1.0.0
  * @link https://github.com/jusbuc2k/knockroute
  * @license MIT
  */
@@ -132,12 +132,15 @@ if (!Array.prototype.map) {
     };
 };
 (function(factory) {
-    // Support AMD or global
+    //Note on "window": We probably shouldn't be using window in this file, but 
+    //since the only known use of kr is in the browser as this point, oh well.
+
+    // Support for loading as an AMD module, or via <script> tag.
     if (typeof define === 'function' && define['amd']) {
-        // [1] AMD anonymous module
+        // Note: jquery is only required here because of the ajax template provider. Need to figure out a better solution.
         define(['exports', 'require', 'knockout', 'jquery'], factory);
     } else {
-        // [2] No module loader (plain <script> tag) - put directly in global namespace
+        // Note: jquery is only required here because of the ajax template provider. Need to figure out a better solution.
         factory(null, null, window['ko'], window['jQuery']);
     }
 }(function (exports, require, ko, jQuery) {
@@ -1021,11 +1024,6 @@ if (!Array.prototype.map) {
 
         var contentSrc = view.templateSrc || template.getAttribute("data-src");
         var contentLoaded = isTrue(template, "data-loaded");
-
-        // As it turns out, this isn't the business of the loader at all I don't think
-        // Q: WHY IS IT NOT THE BUSINESS? WHAT WERE YOU THINKING? ARG....
-        // A: I think it's the business of the router to call the unload method...
-        // var dataPersist = (dataSrc == null || (template.getAttribute("data-persist")||'').toLowerCase().trim() === 'true');
 
         var response = {
             success: false,
