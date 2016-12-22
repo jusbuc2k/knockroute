@@ -1,7 +1,7 @@
 /**
  * knockroute - Router & lazy template loader for Knockout
  * Copyright 2016 Justin R. Buchanan 
- * @version v1.0.0
+ * @version v1.0.1
  * @link https://github.com/jusbuc2k/knockroute
  * @license MIT
  */
@@ -1211,6 +1211,7 @@
             updateMethodName: 'update',
             pathProvider: 'hash',
             templateProvider: 'default',
+            modelFactory: 'default',
             scrollProvider: 'window',
             defaultContent: 'Loading...', // Content to display before init
             defaultTemplateID: '',
