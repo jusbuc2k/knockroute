@@ -26,9 +26,10 @@
     // Export everthing attached to kr into ko.route
     function extendKo() {
         ko.bindingHandlers['routeTemplate'] = routerBinding;
-        if (kr !== exports){
-            ko.route = kr;
-        }   
+        ko.route = kr;
+        // if (kr !== exports){
+        //   ko.route = kr;
+        // }   
     }
 
     //#region Constants
@@ -1203,6 +1204,7 @@
             updateMethodName: 'update',
             pathProvider: 'hash',
             templateProvider: 'default',
+            modelFactory: 'default',
             scrollProvider: 'window',
             defaultContent: 'Loading...', // Content to display before init
             defaultTemplateID: '',
@@ -1411,52 +1413,55 @@
                 navigation: navigationContext,
                 context: this
             });
-
-            // If the model is a constructor function, create a new instance
-            if (typeof model === 'function') {
-                view.modelInstance = self.modelFactory.createModel(model, [self, routeValues]);
+        
+            // If the model is a function or a string, then pass it through to the model factory
+            // to get the model instance. The model factory may return a promise.
+            if (typeof model === 'function' || typeof model === 'string') {
+                model = self.modelFactory.createModel(model, [self, routeValues]);
                 // otherwise the model is an object instance, which should be used as the model
-            } else {
-                view.modelInstance = model;
             }
 
-            try {
-                if (!navigationContext.isPreventDisposeSet) {
-                    executeModelDispose(oldView);
-                    disposeScope(view);
-                }
-
-                if (!oldView.singleton && !navigationContext.isPersistModelSet) {
-                    oldView.modelInstance = null;
-                }
-
-                // unload the old template if it is not the same as the new one
-                if (oldView.activeTemplateID() && oldView.activeTemplateID() !== view.templateID) {
-                    if (typeof oldView.disposeTemplate === 'function') {
-                        oldView.disposeTemplate();
-                    } else {
-                        self.templateProvider.unloadTemplate(oldView.activeTemplateID());
+            Promise.resolve(model).then(function(modelInstance) {
+                view.modelInstance = modelInstance;
+                
+                try {
+                    if (!navigationContext.isPreventDisposeSet) {
+                        executeModelDispose(oldView);
+                        disposeScope(view);
                     }
-                }
 
-                waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function () {
-                    return executeModelAction(view, options.updateMethodName, routeValues);
-                }));
-            } catch (e) {
-                handleError('Error', options.errorTemplateID, e, routeValues);
-                return Promise.reject(e);
-            }
-
-            return Promise.all(waits)
-                .then(aborter)
-                ['catch'](function (reason) {
-                    aborter = null;
-                    if (reason !== 'abort' && !thereWasAlreadyAnError) {
-                        thereWasAlreadyAnError = true;
-                        handleError('Error', options.errorTemplateID, reason, routeValues)
+                    if (!oldView.singleton && !navigationContext.isPersistModelSet) {
+                        oldView.modelInstance = null;
                     }
+
+                    // unload the old template if it is not the same as the new one
+                    if (oldView.activeTemplateID() && oldView.activeTemplateID() !== view.templateID) {
+                        if (typeof oldView.disposeTemplate === 'function') {
+                            oldView.disposeTemplate();
+                        } else {
+                            self.templateProvider.unloadTemplate(oldView.activeTemplateID());
+                        }
+                    }
+
+                    waits.push(executeModelAction(view, options.loadMethodName, routeValues).then(function () {
+                        return executeModelAction(view, options.updateMethodName, routeValues);
+                    }));
+                } catch (e) {
+                    handleError('Error', options.errorTemplateID, e, routeValues);
+                    return Promise.reject(e);
                 }
-            );
+
+                return Promise.all(waits)
+                    .then(aborter)
+                    ['catch'](function (reason) {
+                        aborter = null;
+                        if (reason !== 'abort' && !thereWasAlreadyAnError) {
+                            thereWasAlreadyAnError = true;
+                            handleError('Error', options.errorTemplateID, reason, routeValues)
+                        }
+                    }
+                );
+            });
         }
 
         function loadTemplate(templateOrView) {
