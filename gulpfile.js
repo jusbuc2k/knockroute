@@ -32,6 +32,13 @@ gulp.task('minify', function () {
     .pipe(gulp.dest('dist'));
 });
 
+gulp.task('typings', function () {
+    return gulp.src([
+        './knockroute.d.ts'
+    ])
+    .pipe(gulp.dest('dist'));
+});
+
 gulp.task('minify-compat', function () {
     return gulp.src([
         './lib/es6-promise.js',
@@ -51,4 +58,4 @@ gulp.task('minify-compat', function () {
     .pipe(gulp.dest('dist'));
 });
 
-gulp.task('build', ['minify', 'minify-compat']);
+gulp.task('build', ['typings', 'minify', 'minify-compat']);
