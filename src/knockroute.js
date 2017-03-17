@@ -1413,6 +1413,11 @@
                 navigation: navigationContext,
                 context: this
             });
+            
+            // The load operation was cancelled.
+            if (navigationContext.isCancelled) {
+                return;
+            }
         
             // If the model is a function or a string, then pass it through to the model factory
             // to get the model instance. The model factory may return a promise.

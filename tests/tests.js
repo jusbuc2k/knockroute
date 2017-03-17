@@ -556,9 +556,9 @@ QUnit.asyncTest('TestAjaxTemplateProviderNodes', function (assert) {
 
     var tests = [];
 
-    assert.throws(function () {
-        provider.loadTemplate({ templateID: 'test' })
-    }, 'templateSrc is required');
+    provider.loadTemplate({ templateID: 'test' }).catch(function(foo) {
+        assert.ok(foo.stack, "template src is required should be thrown in promise.");
+    });
 
     assert.throws(function () {
         provider.loadTemplate({ templateSrc: 'test' })
@@ -1833,12 +1833,14 @@ QUnit.asyncTest('TestSetView', function (assert) {
 
     router.init();
 
-    router.onLoaded.subscribe(function (args) {
-        assert.strictEqual(router.view().name, 'view1');
-        QUnit.start();
-    });
+    setTimeout(function(){
+        router.onLoaded.subscribe(function (args) {
+            assert.strictEqual(router.view().name, 'view1');
+            QUnit.start();
+        });
 
-    router.setView(router.getView('view1'));
+        router.setView(router.getView('view1'));
+    },10);
 
 });
 
